@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DEMO</title>
+
+<link rel="shortcut" icon href="https://www.w3.org/favicon.ico" />
+
+<style>
+  video {
+    width: 200px;
+    border: solid 1px #ccc;
+  }
+  button {
+    height: 3em;
+  }
+</style>
+
+<h1>STATE: <span id="state"></span></h1>
+<h4>type: <span id="type"></span></h4>
+
+<div class="select">
+  <label for="audioSource">Audio Source: </label
+  ><select id="audioSource"></select>
+  <form id="amute">
+    <input type="radio" name="amute" value="unmute" checked="checked" />unmute <input type="radio" name="amute" value="softmute" />softmute <input type="radio" name="amute" value="hardmute" />hardmute
+  </form>
+</div>
+<div class="select">
+  <label for="videoSource">Video source: </label
+  ><select id="videoSource"></select>
+  <form id="vmute">
+    <input type="radio" name="vmute" value="unmute" checked="checked" />unmute <input type="radio" name="vmute" value="softmute" />softmute <input type="radio" name="vmute" value="hardmute" />hardmute
+  </form>
+</div>
+
+<div>
+  <button id="start" disabled>start</button>
+  <button id="stop" disabled>stop</button>
+
+  <button id="chgconmeta" disabled>change connection meta</button>
+  <button id="chgtrackmeta" disabled>change track meta</button>
+
+  <button id="chgtrack" disabled>change track</button>
+</div>
+<div>
+  <button id="dllog">download log</button>
+  <button id="dlstatslog">download stats history</button>
+</div>
+
+<h2>Local Stream</h2>
+
+<video id="localStream" autoplay controls></video>
+<!-- video id=localShare autoplay controls></video -->
+
+<h2>Remote Stream</h2>
+<ul id="remote-streams"></ul>
+
+<script src="https://kjur.github.io/jsrsasign/jsrsasign-latest-all-min.js"></script>
+<script type="module" src="demo.js"></script>
