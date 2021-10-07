@@ -1,0 +1,17 @@
+{
+  "name": "@ricoh-live-streaming-api/web-sdk",
+  "version": "1.1.1+20210917",
+  "description": "ricoh-ls-sdk",
+  "scripts": {
+    "start": "http-server -a localhost -o demo -p 3000 -s"
+  },
+  "devDependencies": {
+    "http-server": "^13.0.1"
+  },
+  "dependencies": {},
+  "main": "src/ricoh-ls-sdk.js",
+  "types": "src/ricoh-ls-sdk.d.ts",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/ricoh-live-streaming-api"
+  }
+}

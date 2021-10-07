@@ -153,3 +153,10 @@ See demo/demo.js
 ### v1.0.5
 - add changeMute restriction
 - change release js file name
+
+### v1.1.1
+- enable updateMeta on P2P
+- improve changeMute stability
+- add errors (45605,45614) 
+- remove errors (45003,45207,45216)
+- change module name

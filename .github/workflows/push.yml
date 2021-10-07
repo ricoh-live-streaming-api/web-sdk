@@ -1,0 +1,40 @@
+name: release and publish to GPR.
+on:
+  push:
+    branches:
+      - master
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          registry-url: 'https://npm.pkg.github.com'
+      - run: |
+          npx can-npm-publish --verbose && npm publish || echo "Does not publish"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Check version
+        id: check_version
+        run: echo ::set-output name=VERSION::$(node -p "require('./package.json').version")
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.check_version.outputs.VERSION }}
+          release_name: v${{ steps.check_version.outputs.VERSION }}
+          body: v${{ steps.check_version.outputs.VERSION }}
+          draft: false
+          prerelease: false

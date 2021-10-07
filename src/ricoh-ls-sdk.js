@@ -560,7 +560,7 @@ class WS extends WebSocket {
 
     /** @type {Object} */
     const message = JSON.parse(e.data);
-    this.dispatchEvent(new CustomEvent(message.message_type, { detail: message }));
+    this.dispatchEvent(new CustomEvent("_" + message.message_type, { detail: message }));
   }
 
   /**
@@ -586,7 +586,7 @@ class WS extends WebSocket {
    * @param {function} listener
    */
   on(eventName, listener) {
-    this.addEventListener(eventName, (e) => {
+    this.addEventListener("_" + eventName, (e) => {
       if (!(e instanceof CustomEvent)) return;
       listener(e.detail);
     });
@@ -702,10 +702,9 @@ class ErrorData {
    * @public
    * @param {Number} code
    * @param {String} error
-   * @param {Object} debug
    * @param {any} detail
    */
-  constructor(code, error, debug, detail = null) {
+  constructor(code, error, detail = null) {
     /**
      * @private
      * @type {Number}
@@ -734,12 +733,6 @@ class ErrorData {
     this.type = "UnexpectedError";
     if (category === 4) this.type = "ParameterError";
     else if (category === 5) this.type = "NetworkError";
-
-    /**
-     * @private
-     * @type {Object}
-     */
-    this.debug = debug;
 
     /**
      * @private
@@ -773,8 +766,6 @@ class ErrorData {
     let report = `ricoh-ls-sdk error dump\n\
 timestamp: ${this.localtime}\n\
 error: ${this.type} (${this.code}) ${this.error}\n`;
-
-    // TODO: dump this.debug
 
     if (this.detail instanceof Error) report += "stack: " + this.detail.stack + "\n";
 
@@ -1053,6 +1044,17 @@ class Client extends ET {
 
     /**
      * @private
+     * @type {Log[]}
+     */
+    this.debugInfoHeadHistory = [];
+    /**
+     * @private
+     * @type {Log[]}
+     */
+    this.debugInfoTailHistory = [];
+
+    /**
+     * @private
      * @type {Map}
      */
     this.earlyCandidates = new Map();
@@ -1113,8 +1115,7 @@ class Client extends ET {
    * @param {any} detail
    */
   emitError(code, err, detail) {
-    // TODO: debug info
-    this.dispatchEvent(new SDKErrorEvent(new ErrorData(code, err, {}, detail)));
+    this.dispatchEvent(new SDKErrorEvent(new ErrorData(code, err, detail)));
   }
 
   /**
@@ -1183,6 +1184,7 @@ class Client extends ET {
     report.addHistory("Websocket", "event_____________", this.wsEventHeadHistory);
     report.addHistory("Websocket", "recvMessage_______", this.ws.recvHeadHistory);
     report.addHistory("Websocket", "sendMessage_______", this.ws.sendHeadHistory);
+    report.addHistory("DebugInfo", "debugInfo_________", this.debugInfoHeadHistory);
     this.peers.forEach((peer) => {
       report.addHistory(`Peer(${peer.connection_id})`, "connectionState___", peer.connectionStateHeadHistory);
       report.addHistory(`Peer(${peer.connection_id})`, "signalingState____", peer.signalingStateHeadHistory);
@@ -1213,6 +1215,7 @@ class Client extends ET {
     report.addHistory("Websocket", "event_____________", this.wsEventTailHistory);
     report.addHistory("Websocket", "recvMessage_______", this.ws.recvTailHistory);
     report.addHistory("Websocket", "sendMessage_______", this.ws.sendTailHistory);
+    report.addHistory("DebugInfo", "debugInfo_________", this.debugInfoTailHistory);
     this.peers.forEach((peer) => {
       report.addHistory(`Peer(${peer.connection_id})`, "connectionState___", peer.connectionStateTailHistory);
       report.addHistory(`Peer(${peer.connection_id})`, "signalingState____", peer.signalingStateTailHistory);
@@ -1257,8 +1260,8 @@ class Client extends ET {
    * @param {ConnectOption} option
    */
   connect(client_id, access_token, option) {
-    if (this.state !== "idle") throw new SDKError(new ErrorData(45000, "BadStateOnConnect", {}));
-    if (!option.localLSTracks) throw new SDKError(new ErrorData(45004, "NeedLocalTracksOnConnect", {}));
+    if (this.state !== "idle") throw new SDKError(new ErrorData(45000, "BadStateOnConnect"));
+    if (!option.localLSTracks) throw new SDKError(new ErrorData(45004, "NeedLocalTracksOnConnect"));
 
     try {
       this.timerId = window.setInterval(this.monitor.bind(this), 2500);
@@ -1309,6 +1312,8 @@ class Client extends ET {
 
       this.ws.on("ping", this.onPing.bind(this));
       this.ws.on("error", this.onError.bind(this));
+
+      this.ws.on("debug_info", this.onDebugInfo.bind(this));
     } catch (e) {
       this.internalError(61004, e);
       return;
@@ -1358,7 +1363,6 @@ class Client extends ET {
    * @param {Object} meta
    */
   updateMeta(meta) {
-    if (!this.sfupc) throw new SDKError(new ErrorData(45003, "UnsupportedRoomSpecTypeOnUpdateMeta", {}));
     try {
       this.ws.sendMessage({
         message_type: "update_connection",
@@ -1377,11 +1381,11 @@ class Client extends ET {
    * @param {Object} meta
    */
   updateTrackMeta(lsTrack, meta, src = "app_front") {
-    if (!this.sfupc) throw new SDKError(new ErrorData(45002, "UnsupportedRoomSpecTypeOnUpdateTrackMeta", {}));
+    if (!this.sfupc) throw new SDKError(new ErrorData(45002, "UnsupportedRoomSpecTypeOnUpdateTrackMeta"));
 
     /** @type {Object} */
     const target = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
-    if (!target) throw new SDKError(new ErrorData(45001, "TrackNotFoundOnUpdateTrackMeta", {}));
+    if (!target) throw new SDKError(new ErrorData(45001, "TrackNotFoundOnUpdateTrackMeta"));
 
     try {
       this.ws.sendMessage({
@@ -1403,7 +1407,7 @@ class Client extends ET {
    */
   async replaceMediaStreamTrack(lsTrack, mediaStreamTrack) {
     const localLSTrack = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
-    if (!localLSTrack) throw new SDKError(new ErrorData(45009, "TrackNotFoundOnReplaceMediaStreamTrack", {}));
+    if (!localLSTrack) throw new SDKError(new ErrorData(45009, "TrackNotFoundOnReplaceMediaStreamTrack"));
 
     try {
       await this.replaceLSTrack(mediaStreamTrack, localLSTrack);
@@ -1420,10 +1424,10 @@ class Client extends ET {
    * @param {MuteType} nextMuteType
    */
   async changeMute(lsTrack, nextMuteType) {
-    if (this.state !== "open") throw new SDKError(new ErrorData(45005, "BadStateOnChangeMute", {}));
+    if (this.state !== "open") throw new SDKError(new ErrorData(45005, "BadStateOnChangeMute"));
     /** @type {LocalLSTrack} */
     const localLSTrack = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
-    if (!localLSTrack) throw new SDKError(new ErrorData(45008, "TrackNotFoundOnChangeMute", {}));
+    if (!localLSTrack) throw new SDKError(new ErrorData(45008, "TrackNotFoundOnChangeMute"));
 
     try {
       /** @type {MuteType} */
@@ -1593,8 +1597,15 @@ class Client extends ET {
   /**
    * @private
    */
-  onTrackSFU(peer, e) {
+  async onTrackSFU(peer, e) {
+    /** @type {Object} */
     let obj = {};
+    /** @type {Object} */
+    let conn = {};
+    /** @type {Object} */
+    let objRemoteTrack = {};
+    /** @type {Object} */
+    let objMute = {};
     try {
       /** @type {{track: MediaStreamTrack, streams: MediaStream[]}} */
       const { track, streams } = e;
@@ -1621,11 +1632,17 @@ class Client extends ET {
 
       obj = { connection_id, mediaStreamTrack: track, stream, meta: metadata, mute };
 
-      /** @type {Object} */
-      const conn = this.connections.get(connection_id);
+      conn = this.connections.get(connection_id);
       if (conn) {
         conn.state = "trackadded";
         this.connections.set(connection_id, conn);
+
+        if (conn.reservedUpdate && conn.reservedUpdate.hasOwnProperty(meta.track_id)) {
+          const reserved = conn.reservedUpdate[meta.track_id];
+
+          if (reserved.meta) obj.meta = reserved.meta;
+          if (reserved.muteState) obj.mute = reserved.muteState;
+        }
       }
     } catch (e) {
       this.internalError(61026, e);
@@ -1708,7 +1725,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.0.5+20210204" },
+        sdk_info: { platform: "web", version: "1.1.1+20210917" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption),
       };
       this.ws.sendMessage(connectMessage);
@@ -2029,6 +2046,10 @@ class Client extends ET {
 
       /** @type {Object} */
       const local_track_metadata = await this.getLocalTrackMeta(e.local_track_slots);
+      this.ws.sendMessage({
+        message_type: "sfu.pre_answer",
+        local_track_metadata,
+      });
 
       this.localLSTracks.forEach(async (localLSTrack) => {
         await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
@@ -2039,7 +2060,6 @@ class Client extends ET {
       this.ws.sendMessage({
         message_type: "sfu.answer",
         sdp: answer,
-        local_track_metadata,
       });
     } catch (e) {
       this.internalError(61020, e);
@@ -2089,6 +2109,7 @@ class Client extends ET {
     let objMute = {};
     let muteState;
     let meta;
+
     try {
       /** @type {{track_id: String, tags: Object[]}} */
       const { track_id, tags } = e;
@@ -2101,11 +2122,23 @@ class Client extends ET {
       objRemoteTrack = { connection_id: rtm.connection_id, mediaStreamTrack: rtm.track, stream: rtm.stream, meta };
       muteState = this.tagsToMute(tags);
       objMute = { connection_id: rtm.connection_id, mediaStreamTrack: rtm.track, stream: rtm.stream, mute: muteState };
+
+      const conn = this.connections.get(rtm.connection_id);
+      if (conn && conn.state !== "trackadded") {
+        if (!conn.hasOwnProperty("reservedUpdate")) conn.reservedUpdate = {};
+        /** @type {Object} */
+        const obj = {};
+        if (Object.keys(meta).length) obj.meta = meta;
+        if (muteState) obj.muteState = muteState;
+        conn.reservedUpdate[track_id] = obj;
+
+        this.connections.set(rtm.connection_id, conn);
+        return;
+      }
     } catch (e) {
       this.internalError(61034, e);
       return;
     }
-
     if (Object.keys(meta).length) this.emit("updateremotetrack", objRemoteTrack);
     if (muteState) this.emit("updatemute", objMute);
   }
@@ -2129,9 +2162,27 @@ class Client extends ET {
     const { error_code } = e;
     this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, "sigerror: " + JSON.stringify(e));
 
+    // TODO: remove this if server is modified
+    if (e.reason === "room_state_unacceptable_message_type" && e.client_message_type === "sfu.update_track") {
+      this.emitError(45005, "BadStateOnChangeMute", e);
+      return;
+    }
+
     const sigerr = this.getSignalingError(error_code);
     if (sigerr) this.emitError(45000 + error_code, sigerr.err, e);
     else this.internalError(61045, e);
+  }
+
+  /**
+   * @private
+   */
+  onDebugInfo(e) {
+    try {
+      const { debug_info } = e;
+      this.debugInfoTailHistory = this.logger.putLog(this.debugInfoHeadHistory, this.debugInfoTailHistory, JSON.stringify(debug_info));
+    } catch (e) {
+      this.internalError(61035, e);
+    }
   }
 
   /**
@@ -2244,7 +2295,7 @@ class Client extends ET {
       //[204, { err: ""}], // ltmにtrack_idがない
       //[205, { err: ""}], // ltmのtrack_id形式違反
       //[206, { err: ""}], // tags が配列でない
-      [207, { err: "TooManyMetaOnConnect" }], // tags 内に app_front の tag の数が規定数以上
+      //[207, { err: "TooManyMetaOnConnect" }], // tags 内に app_front の tag の数が規定数以上
       //[208, { err: ""}], // tags 内に sdk の tag の数が規定数以上
       //[209, { err: "DuplicateMetaOnConnect" }], // tags 内に同じ source と name の組の tag が存在
       //[210, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
@@ -2253,7 +2304,7 @@ class Client extends ET {
       //[213, { err: ""}], // tag に source がない
       //[214, { err: ""}], // tag の source 形式違反
       //[215, { err: ""}], // tag に value がない
-      [216, { err: "TooLongMetaValueOnConnect" }], // tag の value を JSON にした際の長さが規定以上
+      //[216, { err: "TooLongMetaValueOnConnect" }], // tag の value を JSON にした際の長さが規定以上
       //[217, { err: ""}], // tag の use_notification 形式違反
       //[218, { err: ""}], // tag の use_analysis 形式違反
       //[299, { err: ""}], // 上記以外のエラー
@@ -2277,6 +2328,25 @@ class Client extends ET {
       [511, { err: "TooLongMetaValueOnUpdateTrackMeta" }], // tag の value を JSON にした際の長さが規定文字以上
       [512, { err: "NotFoundMetaOnUpdateTrackMeta" }], // tag に対応する name と source が一致する LocalTag が存在していない
       //[599, { err: ""}], // 上記以外のエラー
+      //[600, { err: ""}], // local_track_metadata が配列ではない
+      //[601, { err: ""}], // local_track_metadata 要素(以下 ltm)がオブジェクトでない
+      //[602, { err: ""}], // ltm に track_id がない
+      //[603, { err: ""}], // ltm の track_id 形式違反
+      //[604, { err: ""}], // tags が配列でない
+      [605, { err: "TooManyMetaOnConnect" }], // tags 内に app_front の tag の数が規定数以上
+      //[606, { err: ""}], // tags 内に sdk の tag の数が規定数以上
+      //[607, { err: ""}], // tags 内に同じ source と name の組の tag が存在
+      //[608, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
+      //[609, { err: ""}], // tag に name がない
+      //[610, { err: ""}], // tag の name 形式違反
+      //[611, { err: ""}], // tag に source がない
+      //[612, { err: ""}], // tag の source 形式違反
+      //[613, { err: ""}], // tag に value がない
+      [614, { err: "TooLongMetaValueOnConnect" }], // tag の value を JSON にした際の長さが規定以上
+      //[615, { err: ""}], // tag の use_notification 形式違反
+      //[616, { err: ""}], // tag の use_analysis 形式違反
+      //[617, { err: ""}], // pre_answerメッセージが複数回クライアントから送信された
+      //[699, { err: ""}], // 上記以外のエラー
       //[800, { err: ""}], // peer_connection_idがない
       //[801, { err: ""}], // sdpがない
       //[802, { err: ""}], // sdp形式違反
