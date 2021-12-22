@@ -54,6 +54,8 @@ document.addEventListener("DOMContentLoaded", async (e) => {
 
 let lsTracks = [];
 let client = null;
+let firstPeerID = "";
+let firstPeerReq = "required";
 
 function createClient() {
   const client = new LSSDK.Client();
@@ -81,9 +83,13 @@ function createClient() {
   client.on("addremoteconnection", ({ connection_id, meta }) => {
     console.log(`add: ${connection_id}`);
     console.log(meta);
+
+    if (firstPeerID === "") firstPeerID = connection_id;
+
     $("#chgconmeta").disabled = false;
     $("#chgtrackmeta").disabled = false;
     $("#chgtrack").disabled = false;
+    $("#togglereq").disabled = false;
   });
   client.on("removeremoteconnection", ({ connection_id, meta, mediaStreamTrack }) => {
     console.log(`remove: ${connection_id}`);
@@ -137,6 +143,8 @@ $("#stop").addEventListener("click", async (e) => {
   $("#localStream").srcObject = null;
   $("#start").disabled = false;
   $("#stop").disabled = true;
+  firstPeerID = "";
+  firstPeerReq = "required";
 });
 
 $("#start").addEventListener("click", async (e) => {
@@ -173,6 +181,7 @@ $("#start").addEventListener("click", async (e) => {
     const connectOption = {
       localLSTracks: lsTracks,
       // sending: { video: { codec: "vp8", maxBitrateKbps: 2000 } },
+      // iceServersProtocol: "tls",
       meta: { metaexample2: "connection_metadata" },
     };
     if (Credentials.SIGNALING_URL) connectOption.signalingURL = Credentials.SIGNALING_URL;
@@ -211,6 +220,16 @@ $("#chgtrack").addEventListener("click", async (e) => {
     else return;
     $("#localStream").srcObject = stream;
   });
+});
+
+$("#togglereq").addEventListener("click", async (e) => {
+  if (firstPeerID === "") {
+    console.log("no peers");
+    return;
+  }
+  firstPeerReq = firstPeerReq === "required" ? "unrequired" : "required";
+  client.changeMediaRequirements(firstPeerID, firstPeerReq);
+  console.log(`set new requirement ${firstPeerReq}`);
 });
 
 $("#amute").addEventListener("change", async (e) => {

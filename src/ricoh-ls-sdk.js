@@ -12,6 +12,7 @@
  * @property {SendingOption} sending
  * @property {ReceivingOption} receiving
  * @property {"relay"|"all"} iceTransportPolicy
+ * @property {"all"|"udp"|"tcp"|"tls"} iceServersProtocol
  */
 
 /**
@@ -272,6 +273,8 @@ class Peer extends RTCPeerConnection {
 
     this.statsHistory = [];
 
+    this.iceInfo = [];
+
     /** @type {ConnectionID} */
     this.connection_id = connection_id;
 
@@ -502,6 +505,25 @@ class Peer extends RTCPeerConnection {
     await super.addIceCandidate(candidate);
   }
 
+  getIceInfo(stats) {
+    const pairs = [];
+    const localCandidates = {};
+    stats.forEach((s) => {
+      if (s.type === "candidate-pair") {
+        const { id, localCandidateId, availableOutgoingBitrate, availableIncomingBitrate } = s;
+        pairs.push({ id, localCandidateId, availableOutgoingBitrate, availableIncomingBitrate });
+      } else if (s.type === "local-candidate") {
+        const { networkType, protocol, relayProtocol, candidateType } = s;
+        localCandidates[s.id] = { networkType, protocol, relayProtocol, candidateType };
+      }
+    });
+    pairs.forEach((pair) => {
+      const { networkType, protocol, relayProtocol, candidateType } = localCandidates[pair.localCandidateId];
+      const { id, availableOutgoingBitrate, availableIncomingBitrate } = pair;
+      this.iceInfo.push({ id, availableOutgoingBitrate, availableIncomingBitrate, networkType, protocol, relayProtocol, candidateType });
+    });
+  }
+
   /**
    * @private
    */
@@ -512,6 +534,8 @@ class Peer extends RTCPeerConnection {
       statsArray.push(s);
     });
     this.statsHistory = this.logger.putLog(null, this.statsHistory, JSON.stringify(statsArray));
+
+    this.getIceInfo(stats);
 
     if (this.connectionState === "connected" && this.stability === "unstable") {
       this.stability = "stable";
@@ -556,7 +580,7 @@ class WS extends WebSocket {
    * @param {any} e
    */
   onMessage(e) {
-    this.logger.putLog(this.recvHeadHistory, this.recvTailHistory, e.data);
+    this.recvTailHistory = this.logger.putLog(this.recvHeadHistory, this.recvTailHistory, e.data);
 
     /** @type {Object} */
     const message = JSON.parse(e.data);
@@ -573,7 +597,7 @@ class WS extends WebSocket {
     const msg = JSON.stringify(message);
     super.send(msg);
 
-    this.logger.putLog(this.sendHeadHistory, this.sendTailHistory, msg);
+    this.sendTailHistory = this.logger.putLog(this.sendHeadHistory, this.sendTailHistory, msg);
   }
 
   /**
@@ -1073,6 +1097,12 @@ class Client extends ET {
 
     /**
      * @private
+     * @type {"all"|"udp"|"tcp"|"tls"|null}
+     */
+    this.userIceServersProtocol = null;
+
+    /**
+     * @private
      * @type {number|null}
      */
     this.timerId = null;
@@ -1209,6 +1239,11 @@ class Client extends ET {
    * @returns {string}
    */
   getTailReport() {
+    if (this.sfupc) {
+      this.sfupc.iceInfo.forEach((info) => {
+        this.putLog("debug", JSON.stringify(info));
+      });
+    }
     /** @type {Report} */
     const report = new Report("last 5 minutes log");
     report.addHistory("Client___", "state_____________", this.stateTailHistory);
@@ -1281,8 +1316,11 @@ class Client extends ET {
 
       if (option.meta) this.connectionMetadata = option.meta;
       if (option.iceTransportPolicy) this.userIceTransportPolicy = option.iceTransportPolicy;
+      if (option.iceServersProtocol !== undefined) this.userIceServersProtocol = option.iceServersProtocol;
 
       this.logger = new Logger({ headperiod: 5 * 60 * 1000, tailperiod: 5 * 60 * 1000 });
+      this.putLog("debug", `UA: ${window.navigator.userAgent}`);
+      this.putLog("debug", `API Call: connect - ${JSON.stringify(option)}`);
       this.ws = new WS(option.signalingURL || SIGNALING_URL, this.logger);
       this.setState("connecting", "connecting");
 
@@ -1332,6 +1370,7 @@ class Client extends ET {
    */
   disconnect() {
     try {
+      this.putLog("debug", "API Call: disconnect");
       this.setState("closing", "closing");
       if (this.ws) this.ws.close(1000);
 
@@ -1363,6 +1402,8 @@ class Client extends ET {
    * @param {Object} meta
    */
   updateMeta(meta) {
+    this.putLog("debug", "API Call: updateMeta");
+    if (this.state !== "open") throw new SDKError(new ErrorData(45006, "BadStateOnUpdateMeta"));
     try {
       this.ws.sendMessage({
         message_type: "update_connection",
@@ -1381,6 +1422,8 @@ class Client extends ET {
    * @param {Object} meta
    */
   updateTrackMeta(lsTrack, meta, src = "app_front") {
+    this.putLog("debug", "API Call: updateTrackMeta");
+    if (this.state !== "open") throw new SDKError(new ErrorData(45007, "BadStateOnUpdateTrackMeta"));
     if (!this.sfupc) throw new SDKError(new ErrorData(45002, "UnsupportedRoomSpecTypeOnUpdateTrackMeta"));
 
     /** @type {Object} */
@@ -1406,6 +1449,7 @@ class Client extends ET {
    * @param {MediaStreamTrack} mediaStreamTrack
    */
   async replaceMediaStreamTrack(lsTrack, mediaStreamTrack) {
+    this.putLog("debug", "API Call: replaceMediaStreamTrack");
     const localLSTrack = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
     if (!localLSTrack) throw new SDKError(new ErrorData(45009, "TrackNotFoundOnReplaceMediaStreamTrack"));
 
@@ -1424,6 +1468,7 @@ class Client extends ET {
    * @param {MuteType} nextMuteType
    */
   async changeMute(lsTrack, nextMuteType) {
+    this.putLog("debug", "API Call: changeMute");
     if (this.state !== "open") throw new SDKError(new ErrorData(45005, "BadStateOnChangeMute"));
     /** @type {LocalLSTrack} */
     const localLSTrack = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
@@ -1439,6 +1484,42 @@ class Client extends ET {
       if (this.sfupc) this.updateTrackMeta(lsTrack, { muteState }, "sdk");
     } catch (e) {
       this.internalError(61040, e);
+    }
+  }
+
+  /**
+   * ConnectionのMedia要件を変更する
+   *
+   * @public
+   * @param {ConnectionID} connection_id
+   * @param {"required"|"unrequired"} videoRequirement
+   */
+  changeMediaRequirements(connection_id, videoRequirement) {
+    this.putLog("debug", "API Call: changeMediaRequirements");
+    if (this.state !== "open") throw new SDKError(new ErrorData(45010, "BadStateOnChangeMediaRequirements"));
+    if (!this.sfupc) throw new SDKError(new ErrorData(45011, "UnsupportedRoomSpecTypeOnChangeMediaRequirements"));
+    if (this.sendonly) throw new SDKError(new ErrorData(45013, "InvalidReceivingOptionOnChangeMediaRequirements"));
+    const rtm = this.sfupc.remote_track_metadata.find((t) => t.connection_id === connection_id && t.kind === "video");
+    if (!rtm) throw new SDKError(new ErrorData(45012, "ConnectionNotFoundOnChangeMediaRequirements"));
+
+    try {
+      /** @type {Object} */
+      const message = {
+        message_type: "sfu.update_connect_options",
+        options: {
+          receiving: {
+            videos: [
+              {
+                track_id: rtm.track_id,
+                enabled: videoRequirement === "required",
+              },
+            ],
+          },
+        },
+      };
+      this.ws.sendMessage(message);
+    } catch (e) {
+      this.internalError(61047, e);
     }
   }
 
@@ -1556,9 +1637,7 @@ class Client extends ET {
    */
   setState(state, event = null) {
     try {
-      if (this.logger) {
-        this.logger.putLog(this.stateHeadHistory, this.stateTailHistory, `${state} <- ${this.state}`);
-      }
+      this.putLog("state", `${state} <- ${this.state}`);
       this.state = state;
     } catch (e) {
       this.internalError(61001, e);
@@ -1655,6 +1734,10 @@ class Client extends ET {
    * @private
    */
   onIceCandidateP2P(peer, e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onIceCandidateP2P (state!=open)");
+      return;
+    }
     try {
       if (e.candidate === null) return;
       this.ws.sendMessage({
@@ -1671,6 +1754,10 @@ class Client extends ET {
    * @private
    */
   onIceCandidateSFU(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onIceCandidateSFU (state!=open)");
+      return;
+    }
     try {
       this.ws.sendMessage({
         message_type: "sfu.icecandidate",
@@ -1692,23 +1779,28 @@ class Client extends ET {
   /**
    * @private
    */
-  makeConnectMessageOptions(s, r) {
+  makeConnectMessageOptions(send, recv, ice) {
     const options = {};
-    if (s) {
+    if (send) {
       const sending = {};
-      if (s.hasOwnProperty("video")) {
+      if (send.hasOwnProperty("video")) {
         const video = {};
-        if (s.video.hasOwnProperty("codec")) video.codec = s.video.codec;
-        if (s.video.hasOwnProperty("priority")) video.priority = s.video.priority;
-        if (s.video.hasOwnProperty("maxBitrateKbps")) video.max_bitrate_kbps = s.video.maxBitrateKbps;
+        if (send.video.hasOwnProperty("codec")) video.codec = send.video.codec;
+        if (send.video.hasOwnProperty("priority")) video.priority = send.video.priority;
+        if (send.video.hasOwnProperty("maxBitrateKbps")) video.max_bitrate_kbps = send.video.maxBitrateKbps;
         sending.video = video;
       }
       options.sending = sending;
     }
-    if (r) {
+    if (recv) {
       const receiving = {};
-      if (r.hasOwnProperty("enabled")) receiving.enabled = r.enabled;
+      if (recv.hasOwnProperty("enabled")) receiving.enabled = recv.enabled;
       options.receiving = receiving;
+    }
+    if (ice !== undefined && ice !== null) {
+      const connecting = {};
+      connecting.turn_protocols = ice === "all" ? ["udp", "tcp", "tls"] : [ice];
+      options.connecting = connecting;
     }
     return options;
   }
@@ -1718,15 +1810,15 @@ class Client extends ET {
    */
   onWSOpen() {
     try {
-      this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, "wsopen");
+      this.putLog("wsevent", "wsopen");
       /** @type {Object} */
       const connectMessage = {
         message_type: "connect",
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.1.1+20210917" },
-        options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption),
+        sdk_info: { platform: "web", version: "1.2.0+20211109" },
+        options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws.sendMessage(connectMessage);
     } catch (e) {
@@ -1739,7 +1831,7 @@ class Client extends ET {
    */
   onWSError(e) {
     try {
-      this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, "wserror: " + JSON.stringify(e));
+      this.putLog("wsevent", "wserror: " + JSON.stringify(e));
       this.setState("closing", "error");
       this.emitError(50001, "WebSocketError", e);
       this.setState("closed", "close");
@@ -1752,7 +1844,7 @@ class Client extends ET {
    * @private
    */
   onWSClose(e) {
-    this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, `wsclose(${e.code}): ${e.reason}`);
+    this.putLog("wsevent", `wsclose(${e.code}): ${e.reason}`);
     if (e.code === 1000) {
       // ws success code, do nothing
     } else if (e.code < 3000) {
@@ -1768,8 +1860,10 @@ class Client extends ET {
       this.emitError(53601, "ConnectionLimitExceeded", e);
     } else if (e.code === 3719) {
       this.emitError(53719, "ConnectionCreateTimeout", e);
+    } else if (e.code === 3806) {
+      this.emitError(53806, "ServerUnavailable", e);
     } else {
-      // over 3100 exclude 3601,3719
+      // over 3100 exclude 3601,3719,3806
       const paramerr = this.getParamError(e.code);
       if (paramerr) this.emitError(40000 + e.code, paramerr.err, e);
       else this.internalError(61046, e);
@@ -1901,6 +1995,10 @@ class Client extends ET {
    * @private
    */
   async onP2PRequestOffer(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onP2PRequestOffer (state!=open)");
+      return;
+    }
     try {
       /** @type {{ peer_connection_id: ConnectionID }} */
       const { peer_connection_id } = e;
@@ -1933,6 +2031,10 @@ class Client extends ET {
    * @private
    */
   async onP2PRelayOffer(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onP2PRelayOffer (state!=open)");
+      return;
+    }
     try {
       /** @type {{peer_connection_id: ConnectionID, sdp: RTCSessionDescription }} */
       const { peer_connection_id, sdp } = e;
@@ -2034,6 +2136,10 @@ class Client extends ET {
    * @private
    */
   async onSFUOffer(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onSFUOffer (state!=open)");
+      return;
+    }
     try {
       /** @type {{sdp: RTCSessionDescription }} */
       const { sdp } = e;
@@ -2070,6 +2176,10 @@ class Client extends ET {
    * @private
    */
   async onSFUUpdateOffer(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onSFUUpdateOffer (state!=open)");
+      return;
+    }
     try {
       /** @type {{peer_connection_id: ConnectionID, sdp: RTCSessionDescription }} */
       const { sdp } = e;
@@ -2147,6 +2257,10 @@ class Client extends ET {
    * @private
    */
   onPing(e) {
+    if (this.state !== "open") {
+      this.putLog("debug", "return onPing (state!=open)");
+      return;
+    }
     try {
       this.ws.sendMessage({ message_type: "pong" });
     } catch (e) {
@@ -2160,14 +2274,13 @@ class Client extends ET {
   onError(e) {
     /** @type {{error_code: Number}} */
     const { error_code } = e;
-    this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, "sigerror: " + JSON.stringify(e));
+    this.putLog("wsevent", "sigerror: " + JSON.stringify(e));
 
     // TODO: remove this if server is modified
     if (e.reason === "room_state_unacceptable_message_type" && e.client_message_type === "sfu.update_track") {
       this.emitError(45005, "BadStateOnChangeMute", e);
       return;
     }
-
     const sigerr = this.getSignalingError(error_code);
     if (sigerr) this.emitError(45000 + error_code, sigerr.err, e);
     else this.internalError(61045, e);
@@ -2179,7 +2292,7 @@ class Client extends ET {
   onDebugInfo(e) {
     try {
       const { debug_info } = e;
-      this.debugInfoTailHistory = this.logger.putLog(this.debugInfoHeadHistory, this.debugInfoTailHistory, JSON.stringify(debug_info));
+      this.putLog("debug", JSON.stringify(debug_info));
     } catch (e) {
       this.internalError(61035, e);
     }
@@ -2235,6 +2348,9 @@ class Client extends ET {
       [3224, { err: "InvalidVideoPriorityOnConnect" }], // options.sending.video.priority 形式違反
       [3225, { err: "InvalidVideoMaxBitrateKBPSOnConnect" }], // options.sending.video.max_bitrate_kbps 形式違反
       //  [3226, {err: "options.receiving 形式違反"}],
+      //  [3227, {err: "options.receiving.enabled 形式違反"}],
+      //  [3228, {err: "options.connecting 形式違反"}],
+      [3229, { err: "InvalidConnectingTurnProtocols" }], // options.connecting.turn_protocols 形式違反
       //  [3399, {err: "その他の connect 形式違反"}],
       [3400, { err: "InvalidAccessTokenNotJWT" }], //JWT でない"}],
       [3401, { err: "InvalidAccessTokenBadAlg" }], //alg が HS256 でない"}],
@@ -2364,6 +2480,16 @@ class Client extends ET {
       //[1099, { err: ""}], // 上記以外のエラー
     ]);
     return errmap.get(code);
+  }
+
+  /**
+   * @private
+   */
+  putLog(type, msg) {
+    if (!this.logger) return;
+    if (type === "state") this.stateTailHistory = this.logger.putLog(this.stateHeadHistory, this.stateTailHistory, msg);
+    else if (type === "wsevent") this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, msg);
+    else this.debugInfoTailHistory = this.logger.putLog(this.debugInfoHeadHistory, this.debugInfoTailHistory, msg);
   }
 }
 

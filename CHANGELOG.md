@@ -160,3 +160,13 @@ See demo/demo.js
 - add errors (45605,45614) 
 - remove errors (45003,45207,45216)
 - change module name
+
+### v1.2.0
+- API変更
+    - changeMediaRequirementsで対向connectionごとにvideoを受信するか指定できるようにした
+    - ConnectOptionのiceServersProtocolでTURNサーバに接続する際にどのトランスポートプロトコルで接続するか指定できるようにした。この属性で"tls"を指定してTCP443ポートの強制が可能になり、他のトランスポートプロトコルを使ってパフォーマンス最適化する余地を犠牲にして、ファイヤーウォールやプロキシを通過する確率を上げることができる
+- SDK修正
+    - 特定のタイミングでchangeMute、updateTrackMetaを実行した場合に対向connectionに内容が通知されない不具合を修正
+    - 要求されたRoomSpecに対応するSFUまたはTURNが一時的にクラウド上に存在しない場合に専用のエラーコード53806を追加
+    - tailReportsの残存期間を修正
+

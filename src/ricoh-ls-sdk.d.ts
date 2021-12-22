@@ -87,6 +87,10 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * iceTransportPolicy override
      */
     iceTransportPolicy?: "all" | "relay";
+    /**
+     * iceServers protocol
+     */
+    iceServersProtocol?: "all" | "udp" | "tcp" | "tls";
   }
 
   /**
@@ -344,6 +348,15 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @param {MuteType} nextMuteType
      */
     public changeMute(lsTrack: LSTrack, nextMuteType: MuteType): Promise<void>;
+
+    /**
+     * ConnectionのMedia要件を変更する
+     *
+     * @public
+     * @param {ConnectionID} connection_id
+     * @param {"required"|"unrequired"} videoRequirement
+     */
+    public changeMediaRequirements(connection_id: ConnectionID, videoRequirement: "required" | "unrequired"): void;
 
     /**
      * 開始数分のログを取得する
