@@ -1,6 +1,6 @@
 /** @module ricoh-ls-sdk
  */
-declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
+declare module "@ricoh-live-streaming-api/web-sdk" {
   /** @typedef {String} ConnectionID
    */
   type ConnectionID = string;
