@@ -32,6 +32,16 @@ open http://localhost:3000/demo in browser and click `start`
 See demo/demo.js
 
 
+## HOW TO USE WITH NPM
+
+Add a dependency to package.json
+```json
+ "dependencies": {
+   "@ricoh-live-streaming-api/ricoh-ls-sdk": "github:ricoh-live-streaming-api/web-sdk"
+ }
+```
+
+
 ## CHANGE LOG
 
 ### v0.0.0
