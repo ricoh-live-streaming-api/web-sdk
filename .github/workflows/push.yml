@@ -2,7 +2,7 @@ name: release and publish to GPR.
 on:
   push:
     branches:
-      - master
+      - main
 jobs:
   publish:
     runs-on: ubuntu-latest
