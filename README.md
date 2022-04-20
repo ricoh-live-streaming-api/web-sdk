@@ -171,8 +171,16 @@ Add a dependency to package.json
 - remove errors (45003,45207,45216)
 - change module name
 
-### v1.2.0-alpha1
+### v1.2.0
 - add changeMediaRequirements
 - add options.iceServersProtocol to connect
 - fix old tailReports remain
+
+### v1.3.0-alpha1
+- add changeVideoSendBitrate
+- add sending:enabled to ConnectOption
+- add SignalingTimeout error
+- remove internalError after close
+- export SDKError
+
 

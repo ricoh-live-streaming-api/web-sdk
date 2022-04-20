@@ -170,3 +170,13 @@ See demo/demo.js
     - 要求されたRoomSpecに対応するSFUまたはTURNが一時的にクラウド上に存在しない場合に専用のエラーコード53806を追加
     - tailReportsの残存期間を修正
 
+### v1.3.0
+- API変更
+    - changeVideoSendBitrateで接続中に映像送信ビットレートを変更できるようにした
+    - (dev環境のみ提供のβ機能)ConnectOptionのsending.enabledでクライアントの送信機能を無効にできるようにした。同一Room中に大量に送信機能が有効なクライアントが存在する場合、クライアントに大きな処理負荷や遅延が発生してしまうが、このオプションで低減することができる
+- SDK修正
+    - 規定時間内にSignalingメッセージが到達しなかった場合にSignalingTimeoutエラーを通知
+    - 規定時間内にIceConnectionが接続確立しなかった場合にIceConnectionTimeoutエラーを通知
+    - closing/closed状態で発生するInternalErrorをListenerへ通知しないように修正
+    - SDKError型をexportしていなかった不具合を修正
+

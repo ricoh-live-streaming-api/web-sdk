@@ -56,6 +56,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
 
   interface SendingOption {
     video?: SendingVideoOption;
+    enabled?: boolean;
   }
 
   interface ReceivingOption {
@@ -66,7 +67,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     /**
      * local Tracks
      */
-    localLSTracks: LSTrack[];
+    localLSTracks?: LSTrack[];
     /**
      * connection metadata object
      */
@@ -357,6 +358,14 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @param {"required"|"unrequired"} videoRequirement
      */
     public changeMediaRequirements(connection_id: ConnectionID, videoRequirement: "required" | "unrequired"): void;
+
+    /**
+     * videoの送信ビットレートを変更する
+     *
+     * @public
+     * @param {Number} maxBitrateKbps
+     */
+    public changeVideoSendBitrate(maxBitrateKbps: number): void;
 
     /**
      * 開始数分のログを取得する

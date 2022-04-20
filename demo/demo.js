@@ -56,6 +56,7 @@ let lsTracks = [];
 let client = null;
 let firstPeerID = "";
 let firstPeerReq = "required";
+let sendrate = 2000;
 
 function createClient() {
   const client = new LSSDK.Client();
@@ -90,6 +91,7 @@ function createClient() {
     $("#chgtrackmeta").disabled = false;
     $("#chgtrack").disabled = false;
     $("#togglereq").disabled = false;
+    $("#togglesendrate").disabled = false;
   });
   client.on("removeremoteconnection", ({ connection_id, meta, mediaStreamTrack }) => {
     console.log(`remove: ${connection_id}`);
@@ -172,18 +174,25 @@ $("#start").addEventListener("click", async (e) => {
   };
   const access_token = accessToken(Credentials.CLIENT_SECRET, room_spec);
 
-  lsTracks = stream.getTracks().map((mediaStreamTrack) => {
-    const mute = mediaStreamTrack.kind === "audio" ? $("input:checked[name=amute]").value : $("input:checked[name=vmute]").value;
-    return new LSSDK.LSTrack(mediaStreamTrack, stream, { meta: { metaexample: mediaStreamTrack.kind }, mute });
-  });
   try {
     client = createClient();
     const connectOption = {
-      localLSTracks: lsTracks,
-      // sending: { video: { codec: "vp8", maxBitrateKbps: 2000 } },
+      sending: { video: { codec: "vp8", maxBitrateKbps: sendrate } },
       // iceServersProtocol: "tls",
       meta: { metaexample2: "connection_metadata" },
     };
+    const sendrecv = $("input:checked[name=sendrecv]").value;
+    if (sendrecv === "recvonly") {
+      connectOption.sending.enabled = false;
+    } else {
+      lsTracks = stream.getTracks().map((mediaStreamTrack) => {
+        const mute = mediaStreamTrack.kind === "audio" ? $("input:checked[name=amute]").value : $("input:checked[name=vmute]").value;
+        return new LSSDK.LSTrack(mediaStreamTrack, stream, { meta: { metaexample: mediaStreamTrack.kind }, mute });
+      });
+      connectOption.localLSTracks = lsTracks;
+      if (sendrecv === "sendonly") connectOption.receiving = { enabled: false };
+    }
+
     if (Credentials.SIGNALING_URL) connectOption.signalingURL = Credentials.SIGNALING_URL;
     client.connect(Credentials.CLIENT_ID, access_token, connectOption);
   } catch (e) {
@@ -230,6 +239,12 @@ $("#togglereq").addEventListener("click", async (e) => {
   firstPeerReq = firstPeerReq === "required" ? "unrequired" : "required";
   client.changeMediaRequirements(firstPeerID, firstPeerReq);
   console.log(`set new requirement ${firstPeerReq}`);
+});
+
+$("#togglesendrate").addEventListener("click", async (e) => {
+  sendrate = sendrate === 2000 ? 500 : 2000;
+  client.changeVideoSendBitrate(sendrate);
+  console.log(`set new send bitrate ${sendrate}`);
 });
 
 $("#amute").addEventListener("change", async (e) => {

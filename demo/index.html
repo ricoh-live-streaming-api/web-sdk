@@ -32,6 +32,12 @@
     <input type="radio" name="vmute" value="unmute" checked="checked" />unmute <input type="radio" name="vmute" value="softmute" />softmute <input type="radio" name="vmute" value="hardmute" />hardmute
   </form>
 </div>
+<div>
+  <form id="sendrecv">
+    <input type="radio" name="sendrecv" value="sendrecv" checked="checked" />sendrecv <input type="radio" name="sendrecv" value="sendonly" />sendonly
+    <input type="radio" name="sendrecv" value="recvonly" />recvonly
+  </form>
+</div>
 
 <div>
   <button id="start" disabled>start</button>
@@ -44,6 +50,7 @@
 </div>
 <div>
   <button id="togglereq" disabled>toggle video requirement for 1st peer</button>
+  <button id="togglesendrate" disabled>toggle send video bitrate(500<->2000)</button>
 </div>
 <div>
   <button id="dllog">download log</button>

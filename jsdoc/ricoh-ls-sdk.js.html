@@ -1,4 +1,32 @@
-/** @module ricoh-ls-sdk */
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: ricoh-ls-sdk.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: ricoh-ls-sdk.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/** @module ricoh-ls-sdk */
 /** @typedef {String} ConnectionID */
 /** @typedef {String} RoomSessionID */
 /** @typedef {String} ClientID */
@@ -147,7 +175,7 @@ class Logger {
     const epoch = entry.dt.getTime();
 
     if (headHistory !== null) {
-      if (epoch < this.starttime + this.headperiod) headHistory.push(entry);
+      if (epoch &lt; this.starttime + this.headperiod) headHistory.push(entry);
     }
     tailHistory.push(entry);
 
@@ -160,8 +188,8 @@ class Logger {
      * @type {Number}
      */
     let n = 0;
-    for (let i = 0; i < len; i++) {
-      if (epoch - this.tailperiod < tailHistory[i].dt.getTime()) break;
+    for (let i = 0; i &lt; len; i++) {
+      if (epoch - this.tailperiod &lt; tailHistory[i].dt.getTime()) break;
       n++;
     }
     if (n !== 0) tailHistory.splice(0, n);
@@ -210,7 +238,7 @@ class Report {
       );
     });
     merged.sort((a, b) => {
-      if (a.dt < b.dt) return -1;
+      if (a.dt &lt; b.dt) return -1;
       if (a.dt > b.dt) return 1;
       return 0;
     });
@@ -282,25 +310,25 @@ class Peer extends RTCPeerConnection {
     this.iceConnectState = "initial";
 
     this.on("signalingstatechange", () => {
-      this.signalingStateTailHistory = this.logger.putLog(this.signalingStateHeadHistory, this.signalingStateTailHistory, `${this.signalingState} <- ${this.signalingStateLatest}`);
+      this.signalingStateTailHistory = this.logger.putLog(this.signalingStateHeadHistory, this.signalingStateTailHistory, `${this.signalingState} &lt;- ${this.signalingStateLatest}`);
       this.signalingStateLatest = this.signalingState;
     });
     this.on("iceconnectionstatechange", () => {
-      this.iceConnectionStateTailHistory = this.logger.putLog(this.iceConnectionStateHeadHistory, this.iceConnectionStateTailHistory, `${this.iceConnectionState} <- ${this.iceConnectionStateLatest}`);
+      this.iceConnectionStateTailHistory = this.logger.putLog(this.iceConnectionStateHeadHistory, this.iceConnectionStateTailHistory, `${this.iceConnectionState} &lt;- ${this.iceConnectionStateLatest}`);
       this.iceConnectionStateLatest = this.iceConnectionState;
       if (this.iceConnectionState === "connected") this.iceConnectState = "connected";
     });
     this.on("icegatheringstatechange", () => {
-      this.iceGatheringStateTailHistory = this.logger.putLog(this.iceGatheringStateHeadHistory, this.iceGatheringStateTailHistory, `${this.iceGatheringState} <- ${this.iceGatheringStateLatest}`);
+      this.iceGatheringStateTailHistory = this.logger.putLog(this.iceGatheringStateHeadHistory, this.iceGatheringStateTailHistory, `${this.iceGatheringState} &lt;- ${this.iceGatheringStateLatest}`);
       this.iceGatheqingStateLatest = this.iceGatheringState;
     });
     this.on("connectionstatechange", () => {
-      this.connectionStateTailHistory = this.logger.putLog(this.connectionStateHeadHistory, this.connectionStateTailHistory, `${this.connectionState} <- ${this.connectionStateLatest}`);
+      this.connectionStateTailHistory = this.logger.putLog(this.connectionStateHeadHistory, this.connectionStateTailHistory, `${this.connectionState} &lt;- ${this.connectionStateLatest}`);
       this.connectionStateLatest = this.connectionState;
     });
     this.on("icecandidateerror", (e) => {
       this.iceEventTailHistory = this.logger.putLog(this.iceEventHeadHistory, this.iceEventTailHistory, `icecandidateerror(${e.errorCode}) ${e.errorText}`);
-      if (e.errorCode !== 600 && e.errorCode !== 701) console.error(e);
+      if (e.errorCode !== 600 &amp;&amp; e.errorCode !== 701) console.error(e);
     });
 
     /**
@@ -317,7 +345,7 @@ class Peer extends RTCPeerConnection {
       this.addEventListener("signalingstatechange", waitRemoteSDP);
     });
 
-    /** @type {Array<Object>} */
+    /** @type {Array&lt;Object>} */
     this.remote_track_metadata = [];
 
     /** @type {number} */
@@ -329,7 +357,7 @@ class Peer extends RTCPeerConnection {
 
   /**
    * @public
-   * @param {Array<Object>} remote_track_metadata
+   * @param {Array&lt;Object>} remote_track_metadata
    */
   setRemoteTrackMetadata(remote_track_metadata) {
     if (!this.remote_track_metadata) {
@@ -353,8 +381,8 @@ class Peer extends RTCPeerConnection {
    * LSTrackにtrack_idを割り当てる
    *
    * @public
-   * @param {Array<Object>} local_track_slots
-   * @param {Array<LocalLSTrack>} loclsTracks
+   * @param {Array&lt;Object>} local_track_slots
+   * @param {Array&lt;LocalLSTrack>} loclsTracks
    */
   assignTrackIdToTrack(local_track_slots, loclsTracks) {
     /** @type {Object[]} */
@@ -373,8 +401,8 @@ class Peer extends RTCPeerConnection {
    * local_track_metadataを作成する
    *
    * @public
-   * @param {Array<Object>} local_track_slots
-   * @param {Array<LocalLSTrack>} loclsTracks
+   * @param {Array&lt;Object>} local_track_slots
+   * @param {Array&lt;LocalLSTrack>} loclsTracks
    */
   makeLocalTrackMeta(local_track_slots, loclsTracks) {
     return local_track_slots.map((slot) => {
@@ -466,7 +494,7 @@ class Peer extends RTCPeerConnection {
    *
    * @public
    * @param {RTCOfferOptions} [options={}]
-   * @return {Promise<RTCSessionDescription>}
+   * @return {Promise&lt;RTCSessionDescription>}
    */
   async getOffer(options) {
     await this.setLocalDescription(await super.createOffer(options));
@@ -479,7 +507,7 @@ class Peer extends RTCPeerConnection {
    * @public
    * @param {RTCSessionDescription} offer
    * @param {RTCAnswerOptions} [options={}]
-   * @return {Promise<RTCSessionDescription>}
+   * @return {Promise&lt;RTCSessionDescription>}
    */
   async getAnswer(offer, options) {
     await this.setRemoteDescription(offer);
@@ -543,16 +571,16 @@ class Peer extends RTCPeerConnection {
 
     if (this.iceConnectState === "initial") {
       const now = new Date().getTime();
-      if (30 * 1000 < now - this.startTime) {
+      if (30 * 1000 &lt; now - this.startTime) {
         this.emit("changestability", { connection_id: this.connection_id, stability: "iceconnecttimeout" });
         this.iceConnectState = "timeout";
       }
     }
 
-    if (this.connectionState === "connected" && this.stability === "unstable") {
+    if (this.connectionState === "connected" &amp;&amp; this.stability === "unstable") {
       this.stability = "stable";
       this.emit("changestability", { connection_id: this.connection_id, stability: "icestable" });
-    } else if (this.connectionState === "disconnected" && this.stability === "stable") {
+    } else if (this.connectionState === "disconnected" &amp;&amp; this.stability === "stable") {
       this.stability = "unstable";
       this.emit("changestability", { connection_id: this.connection_id, stability: "iceunstable" });
     }
@@ -911,7 +939,7 @@ class ET {
   /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions */
 
   constructor() {
-    /** @type Map<String, EventListenerWithOptions[]> */
+    /** @type Map&lt;String, EventListenerWithOptions[]> */
     this.listeners = new Map();
   }
 
@@ -997,7 +1025,7 @@ class Client extends ET {
 
     /**
      * @private
-     * @type {Map<ConnectionID, Peer>}
+     * @type {Map&lt;ConnectionID, Peer>}
      */
     this.peers = new Map();
 
@@ -1526,7 +1554,7 @@ class Client extends ET {
     if (this.state !== "open") throw new SDKError(new ErrorData(45010, "BadStateOnChangeMediaRequirements"));
     if (!this.sfupc) throw new SDKError(new ErrorData(45011, "UnsupportedRoomSpecTypeOnChangeMediaRequirements"));
     if (this.sendrecv === "sendonly") throw new SDKError(new ErrorData(45013, "InvalidReceivingOptionOnChangeMediaRequirements"));
-    const rtm = this.sfupc.remote_track_metadata.find((t) => t.connection_id === connection_id && t.kind === "video");
+    const rtm = this.sfupc.remote_track_metadata.find((t) => t.connection_id === connection_id &amp;&amp; t.kind === "video");
     if (!rtm) throw new SDKError(new ErrorData(45012, "ConnectionNotFoundOnChangeMediaRequirements"));
 
     try {
@@ -1594,9 +1622,9 @@ class Client extends ET {
     /** @type {Boolean} */
     const recvEnabled = !receiving || !receiving.hasOwnProperty("enabled") || receiving.enabled !== false;
 
-    if (sendEnabled && recvEnabled) return "sendrecv";
-    if (sendEnabled && !recvEnabled) return "sendonly";
-    if (!sendEnabled && recvEnabled) return "recvonly";
+    if (sendEnabled &amp;&amp; recvEnabled) return "sendrecv";
+    if (sendEnabled &amp;&amp; !recvEnabled) return "sendonly";
+    if (!sendEnabled &amp;&amp; recvEnabled) return "recvonly";
     return "void";
   }
 
@@ -1714,7 +1742,7 @@ class Client extends ET {
    */
   setState(state, event = null) {
     try {
-      this.putLog("state", `${state} <- ${this.state}`);
+      this.putLog("state", `${state} &lt;- ${this.state}`);
       this.state = state;
     } catch (e) {
       this.internalError(61001, e);
@@ -1770,7 +1798,7 @@ class Client extends ET {
       /** @type {String} */
       const mid = e.transceiver.mid;
       /** @type {Object} */
-      const meta = peer.remote_track_metadata.find((t) => t.msid === msid && t.mid === mid);
+      const meta = peer.remote_track_metadata.find((t) => t.msid === msid &amp;&amp; t.mid === mid);
       if (!meta) return;
       /** @type {String} */
       const connection_id = meta.connection_id;
@@ -1793,7 +1821,7 @@ class Client extends ET {
         conn.state = "trackadded";
         this.connections.set(connection_id, conn);
 
-        if (conn.reservedUpdate && conn.reservedUpdate.hasOwnProperty(meta.track_id)) {
+        if (conn.reservedUpdate &amp;&amp; conn.reservedUpdate.hasOwnProperty(meta.track_id)) {
           const reserved = conn.reservedUpdate[meta.track_id];
 
           if (reserved.meta) obj.meta = reserved.meta;
@@ -1879,7 +1907,7 @@ class Client extends ET {
       if (recv.hasOwnProperty("enabled")) receiving.enabled = recv.enabled;
       options.receiving = receiving;
     }
-    if (ice !== undefined && ice !== null) {
+    if (ice !== undefined &amp;&amp; ice !== null) {
       const connecting = {};
       connecting.turn_protocols = ice === "all" ? ["udp", "tcp", "tls"] : [ice];
       options.connecting = connecting;
@@ -1930,14 +1958,14 @@ class Client extends ET {
     this.putLog("wsevent", `wsclose(${e.code}): ${e.reason}`);
     if (e.code === 1000) {
       // ws success code, do nothing
-    } else if (e.code < 3000) {
+    } else if (e.code &lt; 3000) {
       // ws error code
       /** @type {Number} */
       const code = 50000 + e.code;
       /** @type {String} */
       const err = "WebSocketBadClose" + code.toString();
       this.emitError(code, err, e);
-    } else if (3000 <= e.code && e.code <= 3099) {
+    } else if (3000 &lt;= e.code &amp;&amp; e.code &lt;= 3099) {
       // signaling success code, do nothing
     } else if (e.code === 3601) {
       this.emitError(53601, "ConnectionLimitExceeded", e);
@@ -2100,7 +2128,7 @@ class Client extends ET {
       peer.on("track", this.onTrackP2P.bind(this, peer));
       peer.on("icecandidate", this.onIceCandidateP2P.bind(this, peer));
       peer.on("changestability", this.onChangeStability.bind(this));
-      if (this.localLSTracks && this.localLSTracks.length !== 0) await peer.addTracks(this.localLSTracks);
+      if (this.localLSTracks &amp;&amp; this.localLSTracks.length !== 0) await peer.addTracks(this.localLSTracks);
 
       this.localLSTracks.forEach(async (localLSTrack) => {
         await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
@@ -2136,7 +2164,7 @@ class Client extends ET {
       peer.on("track", this.onTrackP2P.bind(this, peer));
       peer.on("icecandidate", this.onIceCandidateP2P.bind(this, peer));
       peer.on("changestability", this.onChangeStability.bind(this));
-      if (this.localLSTracks && this.localLSTracks.length !== 0) await peer.addTracks(this.localLSTracks);
+      if (this.localLSTracks &amp;&amp; this.localLSTracks.length !== 0) await peer.addTracks(this.localLSTracks);
 
       this.localLSTracks.forEach(async (localLSTrack) => {
         await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
@@ -2327,7 +2355,7 @@ class Client extends ET {
       objMute = { connection_id: rtm.connection_id, mediaStreamTrack: rtm.track, stream: rtm.stream, mute: muteState };
 
       const conn = this.connections.get(rtm.connection_id);
-      if (conn && conn.state !== "trackadded") {
+      if (conn &amp;&amp; conn.state !== "trackadded") {
         if (!conn.hasOwnProperty("reservedUpdate")) conn.reservedUpdate = {};
         /** @type {Object} */
         const obj = {};
@@ -2370,7 +2398,7 @@ class Client extends ET {
     this.putLog("wsevent", "sigerror: " + JSON.stringify(e));
 
     // TODO: remove this if server is modified
-    if (e.reason === "room_state_unacceptable_message_type" && e.client_message_type === "sfu.update_track") {
+    if (e.reason === "room_state_unacceptable_message_type" &amp;&amp; e.client_message_type === "sfu.update_track") {
       this.emitError(45005, "BadStateOnChangeMute", e);
       return;
     }
@@ -2398,8 +2426,8 @@ class Client extends ET {
     /** @type {number} */
     const now = new Date().getTime();
     /** @type {Boolean} */
-    const timeout = 90 * 1000 < now - this.ws.lastReceived;
-    if ((this.state === "open" || this.state === "connecting") && timeout) {
+    const timeout = 90 * 1000 &lt; now - this.ws.lastReceived;
+    if ((this.state === "open" || this.state === "connecting") &amp;&amp; timeout) {
       this.emitError(54002, "SignalingTimeout", {});
       this.setState("closed", "close");
       return;
@@ -2409,7 +2437,7 @@ class Client extends ET {
       if (conn.sendrecv === "recvonly") return;
       if (conn.state !== "joined") return;
       if (!conn.join) return;
-      if (10 * 1000 < now - conn.join) {
+      if (10 * 1000 &lt; now - conn.join) {
         conn.state = "timeout";
         this.connections.set(connection_id, conn);
         this.emitError(54000, "OnTrackTimeout", { connection_id });
@@ -2482,7 +2510,7 @@ class Client extends ET {
       [3423, { err: "InvalidAccessTokenBadRoomSpecClassificationLabel" }], //room_spec.classification_label 形式違反"}],
       [3424, { err: "InvalidAccessTokenBadRoomSpecMediaControl" }], //room_spec.media_control 形式違反"}],
       [3425, { err: "InvalidAccessTokenBadRoomSpecMediaControlBitrateReservationMBPS" }], //room_spec.media_control.bitrate_reservation_mbps 形式違反"}],
-      [3426, { err: "InvalidAccessTokenExceedTimeLimitation" }], //exp - nbf <= 3600 に違反
+      [3426, { err: "InvalidAccessTokenExceedTimeLimitation" }], //exp - nbf &lt;= 3600 に違反
       [3599, { err: "InvalidAccessToken" }], //その他のAccessToken形式違反"}],
       [3600, { err: "RoomSpecMissMatchOnConnect" }], // room_spec が room_instance 作成時の room_spec と一致しない"}],
       //  [3601, {err: "ConnectionLimitExceeded"}], // max_connection 数超過"}],
@@ -2614,3 +2642,26 @@ export const testables = {
   ErrorData: ErrorData,
   LocalLSTrack: LocalLSTrack,
 };
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-ricoh-ls-sdk.html">ricoh-ls-sdk</a></li></ul><h3>Classes</h3><ul><li><a href="module-ricoh-ls-sdk-Client.html">Client</a></li><li><a href="module-ricoh-ls-sdk-ErrorData.html">ErrorData</a></li><li><a href="module-ricoh-ls-sdk-ET.html">ET</a></li><li><a href="module-ricoh-ls-sdk-LocalLSTrack.html">LocalLSTrack</a></li><li><a href="module-ricoh-ls-sdk-LSTrack.html">LSTrack</a></li><li><a href="module-ricoh-ls-sdk-SDKError.html">SDKError</a></li><li><a href="module-ricoh-ls-sdk-SDKErrorEvent.html">SDKErrorEvent</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Wed Apr 20 2022 09:36:14 GMT+0900 (日本標準時)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
