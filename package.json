@@ -13,5 +13,8 @@
   "types": "src/ricoh-ls-sdk.d.ts",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/ricoh-live-streaming-api"
+  },
+  "ricohLsSdk" : {
+    "version": "1.3.0"
   }
 }
