@@ -57,6 +57,7 @@ let client = null;
 let firstPeerID = "";
 let firstPeerReq = "required";
 let sendrate = 2000;
+let fps = 1000;
 
 function createClient() {
   const client = new LSSDK.Client();
@@ -92,6 +93,7 @@ function createClient() {
     $("#chgtrack").disabled = false;
     $("#togglereq").disabled = false;
     $("#togglesendrate").disabled = false;
+    $("#togglefps").disabled = false;
   });
   client.on("removeremoteconnection", ({ connection_id, meta, mediaStreamTrack }) => {
     console.log(`remove: ${connection_id}`);
@@ -245,6 +247,13 @@ $("#togglesendrate").addEventListener("click", async (e) => {
   sendrate = sendrate === 2000 ? 500 : 2000;
   client.changeVideoSendBitrate(sendrate);
   console.log(`set new send bitrate ${sendrate}`);
+});
+
+$("#togglefps").addEventListener("click", async (e) => {
+  const lsTrack = lsTracks.filter((lsTrack) => lsTrack.mediaStreamTrack.kind === "video")[0];
+  fps = fps === 1000 ? 10 : 1000;
+  client.changeVideoSendFramerate(fps);
+  console.log(`set new fps ${fps}`);
 });
 
 $("#amute").addEventListener("change", async (e) => {

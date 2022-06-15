@@ -368,6 +368,14 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     public changeVideoSendBitrate(maxBitrateKbps: number): void;
 
     /**
+     * videoの送信フレームレートを変更する
+     *
+     * @public
+     * @param {Number} maxFramerate
+     */
+    public changeVideoSendFramerate(maxFramerate: number): void;
+
+    /**
      * 開始数分のログを取得する
      *
      * @public

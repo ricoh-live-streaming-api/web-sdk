@@ -729,6 +729,7 @@ class LocalLSTrack {
     this.stream = lsTrack.stream; // addTrack()以降使用してはいけない
     this.lsTrack = lsTrack; // appからのLocalLSTrack特定にのみ使用し、以降中身は参照しない
     this.senders = [];
+    this.reservedFramerate = null;
   }
 
   getMuteState() {
@@ -756,6 +757,25 @@ class LocalLSTrack {
   async replaceSenderTrack(msTrack) {
     this.senderMediaStreamTrack = msTrack;
     for (let i in this.senders) await this.senders[i].replaceTrack(this.senderMediaStreamTrack);
+  }
+
+  changeFramerate(framerate) {
+    this.senders.forEach((sender) => {
+      if (sender.track === null) return;
+      if (sender.track.kind !== "video") return;
+      const parameters = sender.getParameters();
+      if (!parameters.encodings) parameters.encodings = [{}];
+      if (parameters.encodings[0]) parameters.encodings[0].maxFramerate = framerate;
+      sender.setParameters(parameters);
+    });
+    if (this.senders.every((sender) => sender.track === null)) this.reservedFramerate = framerate;
+  }
+
+  updateEncodingParameters() {
+    if (this.reservedFramerate !== null) {
+      this.changeFramerate(this.reservedFramerate);
+      this.reservedFramerate = null;
+    }
   }
 }
 
@@ -1150,6 +1170,12 @@ class Client extends ET {
      * @type {number|null}
      */
     this.timerId = null;
+
+    /**
+     * @private
+     * @type {number|null}
+     */
+    this.reservedFramerate = null;
   }
 
   /**
@@ -1537,6 +1563,7 @@ class Client extends ET {
 
       const muteState = localLSTrack.getMuteState();
       if (this.sfupc) this.updateTrackMeta(lsTrack, { muteState }, "sdk");
+      if (nextMuteType === "unmute") localLSTrack.updateEncodingParameters();
     } catch (e) {
       this.internalError(61040, e);
     }
@@ -1579,6 +1606,27 @@ class Client extends ET {
   }
 
   /**
+   * videoの送信フレームレートを変更する
+   *
+   * @public
+   * @param {Number} framerate
+   */
+  changeVideoSendFramerate(framerate) {
+    this.putLog("debug", "API Call: changeVideoSendFramerate");
+    if (this.state !== "open") throw new SDKError(new ErrorData(45016, "BadStateOnChangeVideoSendFramerate"));
+    if (framerate &lt; 0.0 || 10000.0 &lt; framerate) throw new SDKError(new ErrorData(45017, "InvalidMaxFramerateOnChangeVideoSendramerate"));
+
+    try {
+      this.reservedFramerate = framerate;
+      this.localLSTracks.forEach((loclsTrack) => {
+        loclsTrack.changeFramerate(framerate);
+      });
+    } catch (e) {
+      this.internalError(61050, e);
+    }
+  }
+
+  /**
    * videoの送信ビットレートを変更する
    *
    * @public
@@ -1587,7 +1635,7 @@ class Client extends ET {
   changeVideoSendBitrate(maxBitrateKbps) {
     this.putLog("debug", "API Call: changeVideoSendBitrate");
     if (this.state !== "open") throw new SDKError(new ErrorData(45015, "BadStateOnChangeVideoSendBitrate"));
-    if (!this.sfupc) throw new SDKError(new ErrorData(45014, "UnsupportedRoomSpecTypeOnChangeVideoSendBitrate"));
+    if (!this.sfupc) throw new SDKError(new ErrorData(45018, "UnsupportedRoomSpecTypeOnChangeVideoSendBitrate"));
 
     try {
       /** @type {Object} */
@@ -1927,7 +1975,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.3.0+20220317" },
+        sdk_info: { platform: "web", version: "1.4.0+20220420" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws.sendMessage(connectMessage);
@@ -2141,6 +2189,9 @@ class Client extends ET {
         peer_connection_id,
         sdp: offer,
       });
+      this.localLSTracks.forEach(async (localLSTrack) => {
+        if (this.reservedFramerate) localLSTrack.changeFramerate(this.reservedFramerate);
+      });
     } catch (e) {
       this.internalError(61016, e);
     }
@@ -2186,6 +2237,10 @@ class Client extends ET {
         });
         this.earlyCandidates.delete(peer_connection_id);
       }
+
+      this.localLSTracks.forEach(async (localLSTrack) => {
+        if (this.reservedFramerate) localLSTrack.changeFramerate(this.reservedFramerate);
+      });
     } catch (e) {
       this.internalError(61017, e);
     }
@@ -2287,6 +2342,10 @@ class Client extends ET {
       this.ws.sendMessage({
         message_type: "sfu.answer",
         sdp: answer,
+      });
+
+      this.localLSTracks.forEach(async (localLSTrack) => {
+        if (this.reservedFramerate) localLSTrack.changeFramerate(this.reservedFramerate);
       });
     } catch (e) {
       this.internalError(61020, e);
@@ -2403,8 +2462,9 @@ class Client extends ET {
       return;
     }
     const sigerr = this.getSignalingError(error_code);
-    if (sigerr) this.emitError(45000 + error_code, sigerr.err, e);
-    else this.internalError(61045, e);
+    if (sigerr) {
+      if (sigerr.err !== "") this.emitError(45000 + error_code, sigerr.err, e);
+    } else this.internalError(61045, e);
   }
 
   /**
@@ -2598,7 +2658,7 @@ class Client extends ET {
       //[700, { err: ""}], // track_id がない
       //[701, { err: ""}], // track_id 形式違反
       //[702, { err: ""}], // enabled の形式違反
-      //[703, { err: ""}], // track_id が LocalTrack に割り振られた track_id ではない
+      [703, { err: "" }], // [InternalErrorとせずIgnore] track_id が LocalTrack に割り振られた track_id ではない
       //[704, { err: ""}], // 送信専用クライアントが受信オプションを変更しようとした
       //[705, { err: ""}], // update_options.sending 形式違反
       //[706, { err: ""}], // update_options.sending.video 形式違反
@@ -2658,7 +2718,7 @@ export const testables = {
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Wed Apr 20 2022 09:36:14 GMT+0900 (日本標準時)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Wed Jun 15 2022 23:01:28 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>
