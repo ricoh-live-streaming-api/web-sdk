@@ -15,7 +15,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
   type JwtAccessToken = string;
   /** @type {string}
    */
-  const SIGNALING_URL = "wss://signaling-dev.livestreaming.mw.smart-integration.ricoh.com/v1/room";
+  const SIGNALING_URL = "wss://signaling.livestreaming.mw.smart-integration.ricoh.com/v1/room";
   /**
    * Client の State Type
    *
@@ -167,6 +167,70 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
   /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions
    */
   type EventListenerWithOptions = any;
+
+  interface LSConnectingEvent extends Event {}
+  interface LSOpenEvent extends Event {
+    access_token_json: string;
+  }
+  interface LSClosingEvent extends Event {}
+  interface LSCloseEvent extends Event {}
+  interface LSAddRemoteConnectionEvent extends Event {
+    connection_id: string;
+    meta: Object;
+  }
+  interface LSUpdateRemoteConnectionEvent extends Event {
+    connection_id: string;
+    meta: Object;
+  }
+  interface LSRemoveRemoteConnectionEvent extends Event {
+    connection_id: string;
+    meta: Object;
+    mediaStreamTrack?: MediaStreamTrack;
+  }
+  interface LSAddRemoteTrackEvent extends Event {
+    connection_id: string;
+    meta?: Object;
+    mediaStreamTrack: MediaStreamTrack;
+    stream: MediaStream;
+    mute: MuteType;
+  }
+  interface LSUpdateRemoteTrackEvent extends Event {
+    connection_id: string;
+    mediaStreamTrack: MediaStreamTrack;
+    stream: MediaStream;
+    meta: Object;
+  }
+  interface LSChangeStabilityEvent extends Event {
+    connection_id: string;
+    stability: string;
+  }
+  interface LSAddLocalTrackEvent extends Event {
+    mediaStreamTrack: MediaStreamTrack;
+    stream: MediaStream;
+  }
+  interface LSUpdateMuteEvent extends Event {
+    connection_id: string;
+    mediaStreamTrack: MediaStreamTrack;
+    stream: MediaStream;
+    mute: MuteType;
+  }
+
+  interface LSClientEventMap {
+    connecting: LSConnectingEvent;
+    open: LSOpenEvent;
+    closing: LSClosingEvent;
+    close: LSCloseEvent;
+    error: SDKErrorEvent;
+    addremoteconnection: LSAddRemoteConnectionEvent;
+    updateremoteconnection: LSUpdateRemoteConnectionEvent;
+    removeremoteconnection: LSRemoveRemoteConnectionEvent;
+    addremotetrack: LSAddRemoteTrackEvent;
+    updateremotetrack: LSUpdateRemoteTrackEvent;
+    changestability: LSChangeStabilityEvent;
+    addlocaltrack: LSAddLocalTrackEvent;
+    updatemute: LSUpdateMuteEvent;
+  }
+
   /**
    * SDK の中心となる Client クラス
    * このクラスを通してシグナリングやメディアの制御を行う
@@ -177,110 +241,13 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    */
   class Client extends ET {
     /**
-     * connecting イベントハンドラを追加する(removeできない)
+     * イベントハンドラを追加する(removeできない)
      *
      * @public
      * @param {EventType} eventName
      * @param {function} listener
      */
-    public on(eventName: "connecting", listener: (e: { type: string }) => void): void;
-    /**
-     * open イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "open", listener: (e: { type: string }) => void): void;
-    /**
-     * closing イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "closing", listener: (e: { type: string }) => void): void;
-    /**
-     * close イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "close", listener: (e: { type: string }) => void): void;
-    /**
-     * error イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "error", listener: (e: SDKErrorEvent) => void): void;
-    /**
-     * addremoteconnection イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "addremoteconnection", listener: (e: { connection_id: string; meta: Object }) => void): void;
-    /**
-     * updateremoteconnection イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "updateremoteconnection", listener: (e: { connection_id: string; meta: Object }) => void): void;
-    /**
-     * removeremoteconnection イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "removeremoteconnection", listener: (e: { connection_id: string; meta: Object; mediaStreamTrack?: MediaStreamTrack }) => void): void;
-    /**
-     * addremotetrack イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "addremotetrack", listener: (e: { connection_id: string; meta?: Object; mediaStreamTrack: MediaStreamTrack; stream: MediaStream; mute: MuteType }) => void): void;
-    /**
-     * updateremotetrack イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "updateremotetrack", listener: (e: { connection_id: string; mediaStreamTrack: MediaStreamTrack; stream: MediaStream; meta: Object }) => void): void;
-    /**
-     * changestability イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "changestability", listener: (e: { connection_id: string; stability: string }) => void): void;
-    /**
-     * addlocaltrack イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "addlocaltrack", listener: (e: { mediaStreamTrack: MediaStreamTrack; stream: MediaStream }) => void): void;
-    /**
-     * updatemute イベントハンドラを追加する(removeできない)
-     *
-     * @public
-     * @param {EventType} eventName
-     * @param {function} listener
-     */
-    public on(eventName: "updatemute", listener: (e: { connection_id: string; mediaStreamTrack: MediaStreamTrack; stream: MediaStream; mute: MuteType }) => void): void;
-
+    public on<K extends keyof LSClientEventMap>(eventName: K, listener: (ev: LSClientEventMap[K]) => void): void;
     /**
      * State を取得する
      *

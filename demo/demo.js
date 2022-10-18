@@ -17,8 +17,8 @@ export function accessToken(CLIENT_SECRET, room_spec) {
   const payload = {
     nbf: KJUR.jws.IntDate.get((now - 60 * 30).toString()),
     exp: KJUR.jws.IntDate.get((now + 60 * 30).toString()),
-    connection_id: btoa(Math.random()).replace(/=/g, ""),
-    room_id: "room1",
+    connection_id: "WebDemoApp" + btoa(Math.random()).replace(/=/g, ""),
+    room_id: "sample-room",
     room_spec: room_spec,
   };
   const accessToken = KJUR.jws.JWS.sign(null, header, payload, CLIENT_SECRET);
@@ -61,26 +61,26 @@ let fps = 1000;
 
 function createClient() {
   const client = new LSSDK.Client();
-  client.addEventListener("connecting", (e) => {
-    console.log(`[${e.type}]`, client.getState());
+  client.on("connecting", () => {
+    console.log(client.getState());
   });
-  client.addEventListener("open", (e) => {
-    console.log(`[${e.type}]`, client.getState());
+  client.on("open", ({ access_token_json }) => {
+    console.log(client.getState());
+    const connection_id = JSON.parse(access_token_json).connection_id;
+    console.log("connection_id: ", connection_id);
   });
-  client.addEventListener("closing", (e) => {
-    console.log(`[${e.type}]`, client.getState());
+  client.on("closing", () => {
+    console.log(client.getState());
   });
-  client.addEventListener("close", (e) => {
-    console.log(`[${e.type}]`, client.getState());
+  client.on("close", () => {
+    console.log(client.getState());
   });
-  client.addEventListener("addlocaltrack", (e) => {
-    console.log(`[${e.type}]`, client.getState());
-    const { stream, mediaStreamTrack } = e.detail;
+  client.on("addlocaltrack", ({ stream }) => {
     $("#localStream").srcObject = stream;
   });
-  client.addEventListener("error", (e) => {
+  client.on("error", (e) => {
     console.table(e.detail);
-    //      console.log(e.toReportString());
+    console.log(e.toReportString());
   });
   client.on("addremoteconnection", ({ connection_id, meta }) => {
     console.log(`add: ${connection_id}`);
@@ -101,6 +101,10 @@ function createClient() {
     console.log(mediaStreamTrack);
     let $video = $(`#${connection_id}`);
     if ($video !== null) {
+      $video.srcObject.getTracks().forEach((track) => {
+        track.stop();
+      });
+      $video.srcObject = null;
       $("#remote-streams").removeChild($video);
     }
   });
@@ -121,6 +125,7 @@ function createClient() {
     if ($video === null) {
       $video = document.createElement("video");
       $video.id = connection_id;
+      $video.setAttribute("playsinline", "");
       $("#remote-streams").appendChild($video);
     }
 
@@ -172,7 +177,7 @@ $("#start").addEventListener("click", async (e) => {
   // const share = await navigator.mediaDevices.getDisplayMedia({ video: true });
   const room_spec = {
     type,
-    //    media_control: { bitrate_reservation_mbps: 10 },
+    media_control: { bitrate_reservation_mbps: 25 },
   };
   const access_token = accessToken(Credentials.CLIENT_SECRET, room_spec);
 
@@ -260,7 +265,7 @@ $("#amute").addEventListener("change", async (e) => {
   const mute = $("input:checked[name=amute]").value;
   if ($("#start").disabled) {
     const lsTrack = lsTracks.filter((lsTrack) => lsTrack.mediaStreamTrack.kind === "audio")[0];
-    client.changeMute(lsTrack, mute);
+    await client.changeMute(lsTrack, mute);
   }
 });
 
@@ -268,7 +273,7 @@ $("#vmute").addEventListener("change", async (e) => {
   const mute = $("input:checked[name=vmute]").value;
   if ($("#start").disabled) {
     const lsTrack = lsTracks.filter((lsTrack) => lsTrack.mediaStreamTrack.kind === "video")[0];
-    client.changeMute(lsTrack, mute);
+    await client.changeMute(lsTrack, mute);
   }
 });
 
