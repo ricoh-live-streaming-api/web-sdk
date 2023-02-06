@@ -2786,7 +2786,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.5.0+20220825" },
+        sdk_info: { platform: "web", version: "1.6.0+20230112" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -2808,6 +2808,8 @@ class Client extends ET {
   getCloseErr(code) {
     const table = [
       { code: 1000, retcode: 0, error: "" },
+      { code: 3002, retcode: 53002, error: "ConnectionClosedByApplication" },
+      { code: 3003, retcode: 53003, error: "MaxRoomPeriodExceeded" },
       { code: 3601, retcode: 53601, error: "ConnectionLimitExceeded" },
       { code: 3719, retcode: 53719, error: "ConnectionCreateTimeout" },
       { code: 3806, retcode: 53806, error: "ServerUnavailable" },
@@ -2871,6 +2873,7 @@ class Client extends ET {
         this.room_session_id = room_session_id;
       },
       () => {
+        this.setState("open", "open", { access_token_json });
         const now = new Date().getTime();
         e.connections.forEach((connection) => {
           const { connection_id, tags } = connection;
@@ -2879,10 +2882,8 @@ class Client extends ET {
           /** @type {AddRemoteConnectionObj} */
           const obj = { connection_id, meta };
           this.emit("addremoteconnection", obj);
-
           this.connections.set(connection_id, { state: "joined", join: now, sendrecv });
         });
-        this.setState("open", "open", { access_token_json });
       },
     );
   }
@@ -3335,7 +3336,7 @@ class Client extends ET {
       if (10 * 1000 < now - conn.join) {
         conn.state = "timeout";
         this.connections.set(connection_id, conn);
-        this.emitError(54000, "OnTrackTimeout", { connection_id });
+        this.putLog("debug", `OnTrackTimeout: ${connection_id}`);
       }
     });
   }

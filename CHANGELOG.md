@@ -173,3 +173,11 @@
     - 一部エラー内容の表現を改善
 - サンプルアプリ修正
     - disconnect時のvideoのsrcObject等の関連リソース解放処理を改善
+
+## v1.6.0
+- SDK 修正
+    - [NetworkError の追加と廃止](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)を行いました
+        - 追加: Room 管理 API (3 月までにリリース予定) でアプリケーションから切断された場合のエラーコード 53002 ConnectionClosedByApplication
+        - 追加: Room の最大持続時間(24 時間)を越えて切断された場合のエラーコード 53003 MaxRoomPeriodExceeded
+        - 廃止: 54000 OnTrackTimeout。同等の内容はログに出力されるのみになります
+    - open イベントの前で addremoteconnection イベントが発生しないように修正しました
