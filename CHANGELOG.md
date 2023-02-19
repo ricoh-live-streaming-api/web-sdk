@@ -181,3 +181,7 @@
         - 追加: Room の最大持続時間(24 時間)を越えて切断された場合のエラーコード 53003 MaxRoomPeriodExceeded
         - 廃止: 54000 OnTrackTimeout。同等の内容はログに出力されるのみになります
     - open イベントの前で addremoteconnection イベントが発生しないように修正しました
+
+## v1.6.1
+- SDK 修正
+  - replaceMediaStreamTrack で CanvasCaptureMediaStreamTrack のインスタンスを指定できない問題を修正しました

@@ -1,6 +1,6 @@
 {
   "name": "@ricoh-live-streaming-api/web-sdk",
-  "version": "1.6.0+20230112",
+  "version": "1.6.1+20230216",
   "description": "ricoh-ls-sdk",
   "scripts": {
     "start": "http-server -a localhost -o demo -p 3000 -s"

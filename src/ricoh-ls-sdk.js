@@ -2132,7 +2132,7 @@ class Client extends ET {
    * @returns {{code: number, error: string, localLSTrack: LocalLSTrack|null}}
    */
   checkReplaceMediaStreamTrackErr(mediaStreamTrack, lsTrack) {
-    if (this.typeOf(mediaStreamTrack) !== "mediastreamtrack") return { code: 45020, error: "InvalidMediaStreamTrackOnReplaceMediaStreamTrack", localLSTrack: null };
+    if (!(mediaStreamTrack instanceof MediaStreamTrack)) return { code: 45020, error: "InvalidMediaStreamTrackOnReplaceMediaStreamTrack", localLSTrack: null };
 
     const localLSTrack = this.localLSTracks.find((loclsTrack) => loclsTrack.lsTrack === lsTrack);
     if (!localLSTrack) return { code: 45009, error: "TrackNotFoundOnReplaceMediaStreamTrack", localLSTrack: null };
@@ -2355,15 +2355,6 @@ class Client extends ET {
     if (error !== "") throw new SDKError(new ErrorData(code, error));
 
     this.changeVideoSendBitrateMain(maxBitrateKbps);
-  }
-
-  /**
-   * @private
-   * @param {object} obj
-   * @returns {string}
-   */
-  typeOf(obj) {
-    return Object.prototype.toString.call(obj).slice(8, -1).toLowerCase();
   }
 
   /**
@@ -2786,7 +2777,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.6.0+20230112" },
+        sdk_info: { platform: "web", version: "1.6.1+20230216" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
