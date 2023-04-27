@@ -10,8 +10,8 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v2
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '16.x'
           registry-url: 'https://npm.pkg.github.com'
@@ -23,18 +23,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Check version
         id: check_version
         run: echo "VERSION=$(node -p "require('./package.json').version.split('+')[0]")" >> $GITHUB_OUTPUT
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.check_version.outputs.VERSION }}
-          release_name: v${{ steps.check_version.outputs.VERSION }}
+          name: v${{ steps.check_version.outputs.VERSION }}
           body: v${{ steps.check_version.outputs.VERSION }}
           draft: false
           prerelease: false
+          target_commitish: main

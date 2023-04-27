@@ -725,9 +725,17 @@ class Peer extends RTCPeerConnection {
      */
     this.iceConnectState = "initial";
 
+    /**
+     * @private
+     * @type {Array<Object>}
+     */
+    this.connectedTracks = [];
+
     this.on("signalingstatechange", () => {
       this.signalingStateTailHistory = this.logger.putLog(this.signalingStateHeadHistory, this.signalingStateTailHistory, `${this.signalingState} <- ${this.signalingStateLatest}`);
       this.signalingStateLatest = this.signalingState;
+
+      if (this.signalingState == "stable") this.emitTrackEvents();
     });
     this.on("iceconnectionstatechange", () => {
       this.iceConnectionStateTailHistory = this.logger.putLog(this.iceConnectionStateHeadHistory, this.iceConnectionStateTailHistory, `${this.iceConnectionState} <- ${this.iceConnectionStateLatest}`);
@@ -762,6 +770,29 @@ class Peer extends RTCPeerConnection {
 
     /** @type {"stable"|"unstable"} */
     this.stability = "stable";
+  }
+
+  /**
+   * @private
+   */
+  emitTrackEvents() {
+    const tracks = [];
+    this.getReceivers().forEach((r) => {
+      if (r.track.readyState != "ended") {
+        const codec = typeof r.getParameters == "function" ? r.getParameters()?.codecs[0]?.mimeType : undefined;
+        const isRemoteTrack = this.remote_track_metadata.find((t) => t.track?.id === r.track.id);
+        if (isRemoteTrack) tracks.push({ id: r.track.id, kind: r.track.kind, codec });
+      }
+    });
+    const connected = tracks.filter((t) => this.connectedTracks.every((c) => c.id !== t.id));
+    connected.forEach((t) => {
+      this.emit("trackconnected", { id: t.id, codec: t.codec, kind: t.kind });
+    });
+    const disconnected = this.connectedTracks.filter((c) => tracks.every((t) => t.id !== c.id));
+    disconnected.forEach((t) => {
+      this.emit("trackdisconnected", { id: t.id, kind: t.kind });
+    });
+    this.connectedTracks = tracks;
   }
 
   /**
@@ -1676,6 +1707,8 @@ class Client extends ET {
     this.apiReady = false;
 
     this.wscancel = false;
+
+    this.trackReport = "";
   }
 
   /**
@@ -1895,6 +1928,16 @@ class Client extends ET {
   }
 
   /**
+   * Connectionのログを取得する
+   *
+   * @public
+   * @returns {string}
+   */
+  getTrackReport() {
+    return this.trackReport;
+  }
+
+  /**
    * @private
    * @param {ClientID} client_id
    * @param {JwtAccessToken} access_token
@@ -2040,6 +2083,8 @@ class Client extends ET {
           window.clearInterval(this.timerId);
           this.timerId = null;
         }
+
+        this.trackReport = "";
       },
       null,
       false,
@@ -2594,6 +2639,7 @@ class Client extends ET {
           conn.state = "trackadded";
           this.connections.set(peer.connection_id, conn);
         }
+        this.trackReport += `[${new Date().toISOString()}]\tadd(${track.kind})\t${track.id}\tconnection_id: ${peer.connection_id}\n`;
       },
       () => {
         this.emit("addremotetrack", obj);
@@ -2647,6 +2693,7 @@ class Client extends ET {
           this.connections.set(connection_id, conn);
           this.updateReserved(conn, rtm.track_id, obj);
         }
+        this.trackReport += `[${new Date().toISOString()}]\tadd(${track.kind})\t${track.id}\tconnection_id: ${connection_id}\n`;
       },
       () => {
         this.emit("addremotetrack", obj);
@@ -2690,6 +2737,23 @@ class Client extends ET {
         candidate: e.candidate,
       });
     });
+  }
+
+  /**
+   * @private
+   * @param {{id: string, kind: string, codec: string}} e
+   */
+  onTrackConnected(e) {
+    if (e.codec) this.trackReport += `[${new Date().toISOString()}]\tconnect(${e.kind})\t${e.id}\tcodec: ${e.codec}\n`;
+    else this.trackReport += `[${new Date().toISOString()}]\tconnect(${e.kind})\t${e.id}\n`;
+  }
+
+  /**
+   * @private
+   * @param {{id: string, kind: string}} e
+   */
+  onTrackDisconnected(e) {
+    this.trackReport += `[${new Date().toISOString()}]\tdisconnect(${e.kind})\t${e.id}\n`;
   }
 
   /**
@@ -2777,7 +2841,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.6.1+20230216" },
+        sdk_info: { platform: "web", version: "1.7.0+20230420" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -2917,8 +2981,13 @@ class Client extends ET {
         const { connection } = e;
         const { connection_id, tags } = connection;
         const meta = this.tagsToMeta(tags);
+
         if (this.sfupc) {
-          const mediaStreamTracks = this.sfupc.remote_track_metadata.map((meta) => meta.track);
+          const rtmForConnecion = this.sfupc.remote_track_metadata.filter((rtm) => rtm.connection_id === connection_id);
+          const mediaStreamTracks = rtmForConnecion.map((meta) => meta.track);
+          mediaStreamTracks.forEach((track) => {
+            this.trackReport += `[${new Date().toISOString()}]\tremove(${track?.kind})\t${track?.id}\n`;
+          });
           obj = { connection_id, meta, mediaStreamTracks };
         } else {
           obj = { connection_id, meta };
@@ -2926,7 +2995,11 @@ class Client extends ET {
 
         const peer = this.peers.get(connection_id);
         if (peer) {
-          this.localLSTracks.forEach((loclsTrack) => loclsTrack.removeSenders(peer));
+          this.localLSTracks.forEach((loclsTrack) => {
+            const track = loclsTrack.mediaStreamTrack;
+            this.trackReport += `[${new Date().toISOString()}]\tremove(${track?.kind})\t${track?.id}\n`;
+            loclsTrack.removeSenders(peer);
+          });
           peer.stop();
           peer.close();
           this.peers.delete(connection_id);
@@ -2974,6 +3047,8 @@ class Client extends ET {
     peer.on("track", this.onTrackP2P.bind(this, peer));
     peer.on("icecandidate", this.onIceCandidateP2P.bind(this, peer));
     peer.on("changestability", this.onChangeStability.bind(this));
+    peer.on("trackconnected", this.onTrackConnected.bind(this));
+    peer.on("trackdisconnected", this.onTrackDisconnected.bind(this));
     if (this.localLSTracks && this.localLSTracks.length !== 0) await peer.addTracks(this.localLSTracks);
     return peer;
   }
@@ -3143,6 +3218,8 @@ class Client extends ET {
       this.sfupc.on("track", this.onTrackSFU.bind(this, this.sfupc));
       this.sfupc.on("icecandidate", this.onIceCandidateSFU.bind(this));
       this.sfupc.on("changestability", this.onChangeStability.bind(this));
+      this.sfupc.on("trackconnected", this.onTrackConnected.bind(this));
+      this.sfupc.on("trackdisconnected", this.onTrackDisconnected.bind(this));
 
       if (this.sendrecv !== "recvonly") {
         const local_track_metadata = await this.getLocalTrackMeta(e.local_track_slots);

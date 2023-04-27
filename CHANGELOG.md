@@ -185,3 +185,9 @@
 ## v1.6.1
 - SDK 修正
   - replaceMediaStreamTrack で CanvasCaptureMediaStreamTrack のインスタンスを指定できない問題を修正しました
+
+## v1.7.0
+- API 変更
+  - Client の open から API コール時点 までに発生した MediaStreamTrack の追加削除ログが取得するメソッド[Client#getTrackReport()](https://api.livestreaming.ricoh/document/ricoh-live-streaming-client-sdk-api-%E5%A4%96%E9%83%A8%E4%BB%95%E6%A7%98/#gettrackreport)を追加しました
+- SDK 修正
+  - removeremoteconnection イベントのコールバックの引数にイベントと紐づく Connection と紐づかない MediaStreamTrack が含まれていた問題を修正しました

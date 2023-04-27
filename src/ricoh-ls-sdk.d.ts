@@ -362,6 +362,13 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @public
      */
     public getStatsReport(): string;
+
+    /**
+     * 接続開始からのTrackログを取得する
+     *
+     * @public
+     */
+    public getTrackReport(): string;
   }
   /**
    * MediaStreamTrack の wrapper
