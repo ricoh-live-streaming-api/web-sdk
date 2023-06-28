@@ -191,3 +191,8 @@
   - Client の open から API コール時点 までに発生した MediaStreamTrack の追加削除ログが取得するメソッド[Client#getTrackReport()](https://api.livestreaming.ricoh/document/ricoh-live-streaming-client-sdk-api-%E5%A4%96%E9%83%A8%E4%BB%95%E6%A7%98/#gettrackreport)を追加しました
 - SDK 修正
   - removeremoteconnection イベントのコールバックの引数にイベントと紐づく Connection と紐づかない MediaStreamTrack が含まれていた問題を修正しました
+
+## v1.7.1
+- SDK 修正
+  - Client#connect()直後に Client#changeMute() を呼び出したとき、接続相手に updatemute イベントが通知されないことがある問題を修正しました
+

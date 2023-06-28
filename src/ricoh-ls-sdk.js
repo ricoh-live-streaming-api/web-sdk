@@ -130,6 +130,16 @@
  */
 
 /**
+ * @typedef {object} InitialUpdateSendingVideoOptionMuteVideo
+ * @property {string} mute_type
+ */
+
+/**
+ * @typedef {object} InitialUpdateSendingVideoOptionMute
+ * @property {InitialUpdateSendingVideoOptionMuteVideo} video
+ */
+
+/**
  * @typedef {object} InitialUpdateTrack
  * @property {LocalLSTrack} localLSTrack
  * @property {LocalTag[]} tags
@@ -1684,6 +1694,12 @@ class Client extends ET {
 
     /**
      * @private
+     * @type {InitialUpdateSendingVideoOptionMute|null}
+     */
+    this.initialUpdateSendingVideoOptionMute = null;
+
+    /**
+     * @private
      * @type {Map<string, InitialUpdateTrack>}
      */
     this.initialUpdateTrack = new Map();
@@ -2245,11 +2261,16 @@ class Client extends ET {
   async changeMuteMain(curMuteType, nextMuteType, localLSTrack) {
     await this.withErrAsync(61040, async () => {
       await this.changeMuteState(curMuteType, nextMuteType, localLSTrack);
-      if (this.isSfuRoom() && this.apiReady) {
+      if (this.isSfuRoom()) {
         const tags = this.metaToTags({ muteState: localLSTrack.getMuteState() }, "sdk");
-        this.sendUpdateTrack({ localLSTrack, tags });
-        if (localLSTrack.mediaStreamTrack.kind === "video") this.sendUpdateSendingVideoOption({ video: { mute_type: localLSTrack.getMuteType() } });
-        if (nextMuteType === "unmute") localLSTrack.updateEncodingParameters();
+        if (this.apiReady) {
+          this.sendUpdateTrack({ localLSTrack, tags });
+          if (localLSTrack.mediaStreamTrack.kind === "video") this.sendUpdateSendingVideoOption({ video: { mute_type: localLSTrack.getMuteType() } });
+          if (nextMuteType === "unmute") localLSTrack.updateEncodingParameters();
+        } else {
+          this.initialUpdateTrack.set(localLSTrack.mediaStreamTrack.id, { localLSTrack, tags });
+          this.initialUpdateSendingVideoMuteOption = { video: { mute_type: localLSTrack.getMuteType() } };
+        }
       }
     });
   }
@@ -2841,7 +2862,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.7.0+20230420" },
+        sdk_info: { platform: "web", version: "1.7.1+20230615" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -3192,6 +3213,9 @@ class Client extends ET {
 
     // update_connect_options: sending.video.max_bitrate_kbps
     if (this.initialUpdateSendingVideoOption) this.sendUpdateSendingVideoOption(this.initialUpdateSendingVideoOption);
+
+    // update_connect_options: sending.video.mute_type
+    if (this.initialUpdateSendingVideoOptionMute) this.sendUpdateSendingVideoOption(this.initialUpdateSendingVideoOptionMute);
 
     // update_connect_options: receiving.enabled
     this.initialUpdateReceivingVideosOption.forEach((val, connection_id) => {
