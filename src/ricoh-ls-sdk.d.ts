@@ -27,7 +27,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    * Client の Event Type
    *
    * @public
-   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updatemute" | "changestability"} EventType
+   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updatemute" | "changestability"  | "log"} EventType
    */
   type EventType =
     | "connecting"
@@ -42,7 +42,8 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     | "removeremoteconnection"
     | "updateremoteconnection"
     | "updatemute"
-    | "changestability";
+    | "changestability"
+    | "log";
 
   type VideoCodecType = "h264" | "vp8" | "vp9" | "h265" | "av1";
 
@@ -214,6 +215,12 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     stream: MediaStream;
     mute: MuteType;
   }
+  interface LSLogEvent extends Event {
+    msg: string;
+    category: string;
+    subcategory: string;
+    date: Date;
+  }
 
   interface LSClientEventMap {
     connecting: LSConnectingEvent;
@@ -229,6 +236,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     changestability: LSChangeStabilityEvent;
     addlocaltrack: LSAddLocalTrackEvent;
     updatemute: LSUpdateMuteEvent;
+    log: LSLogEvent;
   }
 
   /**

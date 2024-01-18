@@ -139,6 +139,9 @@ function createClient() {
   client.on("updateremotetrack", ({ connection_id, mediaStreamTrack, stream, meta }) => {
     console.log(connection_id, mediaStreamTrack, stream, meta);
   });
+  client.on("log", ({ msg, category, subcategory, date }) => {
+    // if (type != "stats") console.log(`[${date.toISOString()}]\t"${category}",\t"${subcategory}",\t${msg}`);
+  });
 
   return client;
 }

@@ -196,3 +196,7 @@
 - SDK 修正
   - Client#connect()直後に Client#changeMute() を呼び出したとき、接続相手に updatemute イベントが通知されないことがある問題を修正しました
 
+## v1.8.0
+- API 変更
+  - [log イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88)を追加しました。getTailReport や getHeadReport で取得できるログと同等の情報を、逐次的なイベントとしてオブジェクトで取得できるようになります。
+

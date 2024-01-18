@@ -411,17 +411,6 @@
  */
 
 /**
- * @typedef {object} IceInfo
- * @property {string} id
- * @property {string} availableOutgoingBitrate
- * @property {string} availableIncomingBitrate
- * @property {string} networkType
- * @property {string} protocol
- * @property {string} relayProtocol
- * @property {string} candidateType
- */
-
-/**
  * @typedef {object} CandidatePair
  * @property {string} id
  * @property {string} localCandidateId
@@ -474,15 +463,68 @@ const SIGNALING_URL = "wss://signaling.livestreaming.mw.smart-integration.ricoh.
  */
 
 /**
+ * Safari が EventTarget を継承できないので Polyfill
+ * Client が動く程度の範囲で実装
+ *
+ * @public
+ * @class ET
+ */
+class ET {
+  /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions */
+
+  constructor() {
+    /** @type {Map<string, EventListenerWithOptions[]>} */
+    this.listeners = new Map();
+  }
+
+  /**
+   * @param {string} type
+   * @param {EventListener} listener
+   * @param {AddEventListenerOptions} options
+   */
+  addEventListener(type, listener, options = {}) {
+    const listeners = this.listeners.get(type) || [];
+    listeners.push({ listener, options });
+    this.listeners.set(type, listeners);
+  }
+
+  /**
+   * @param {Event} event
+   */
+  dispatchEvent(event) {
+    const listeners = this.listeners.get(event.type) || [];
+    listeners.forEach(({ listener, options }) => {
+      listener.call(this, event);
+      if (!options.once) return;
+      this.removeEventListener(event.type, listener, options);
+    });
+  }
+
+  /**
+   *
+   * @param {string} type
+   * @param {EventListener} func
+   * @param {AddEventListenerOptions} options
+   */
+  removeEventListener(type, func, options = {}) {
+    const listeners = this.listeners.get(type) || [];
+    const removed = listeners.filter(({ listener }) => listener !== func);
+    this.listeners.set(type, removed);
+  }
+}
+
+/**
  * Log出力 クラス
  *
  * @private
+ * @extends ET
  */
-class Logger {
+class Logger extends ET {
   /**
    * @param {{headperiod: number, tailperiod: number}} option
    */
   constructor(option) {
+    super();
     /**
      * @private
      * @type {number}
@@ -506,14 +548,18 @@ class Logger {
    * 新規logをheads/tailsに追加し、古いlogを削除する
    *
    * @public
+   * @param {string} category
+   * @param {string} subcategory
    * @param {Log[]|null} headHistory
    * @param {Log[]} tailHistory
    * @param {string} log
    * @returns {Log[]}
    */
-  putLog(headHistory, tailHistory, log) {
+  putLog(category, subcategory, headHistory, tailHistory, log) {
     const entry = { dt: new Date(), log };
     const epoch = entry.dt.getTime();
+
+    this.dispatchEvent(new CustomEvent("logged", { detail: { log, category, subcategory, date: entry.dt } }));
 
     if (headHistory !== null) {
       if (epoch < this.starttime + this.headperiod) headHistory.push(entry);
@@ -714,12 +760,6 @@ class Peer extends RTCPeerConnection {
 
     /**
      * @public
-     * @type {IceInfo[]}
-     */
-    this.iceInfo = [];
-
-    /**
-     * @public
      * @type {ConnectionID}
      */
     this.connection_id = connection_id;
@@ -742,26 +782,36 @@ class Peer extends RTCPeerConnection {
     this.connectedTracks = [];
 
     this.on("signalingstatechange", () => {
-      this.signalingStateTailHistory = this.logger.putLog(this.signalingStateHeadHistory, this.signalingStateTailHistory, `${this.signalingState} <- ${this.signalingStateLatest}`);
+      this.signalingStateTailHistory = this.putLog("signalingState", this.signalingStateHeadHistory, this.signalingStateTailHistory, `${this.signalingState} <- ${this.signalingStateLatest}`);
       this.signalingStateLatest = this.signalingState;
 
       if (this.signalingState == "stable") this.emitTrackEvents();
     });
     this.on("iceconnectionstatechange", () => {
-      this.iceConnectionStateTailHistory = this.logger.putLog(this.iceConnectionStateHeadHistory, this.iceConnectionStateTailHistory, `${this.iceConnectionState} <- ${this.iceConnectionStateLatest}`);
+      this.iceConnectionStateTailHistory = this.putLog(
+        "iceConnectionState",
+        this.iceConnectionStateHeadHistory,
+        this.iceConnectionStateTailHistory,
+        `${this.iceConnectionState} <- ${this.iceConnectionStateLatest}`,
+      );
       this.iceConnectionStateLatest = this.iceConnectionState;
       if (this.iceConnectionState === "connected") this.iceConnectState = "connected";
     });
     this.on("icegatheringstatechange", () => {
-      this.iceGatheringStateTailHistory = this.logger.putLog(this.iceGatheringStateHeadHistory, this.iceGatheringStateTailHistory, `${this.iceGatheringState} <- ${this.iceGatheringStateLatest}`);
+      this.iceGatheringStateTailHistory = this.putLog(
+        "iceGatheringState_",
+        this.iceGatheringStateHeadHistory,
+        this.iceGatheringStateTailHistory,
+        `${this.iceGatheringState} <- ${this.iceGatheringStateLatest}`,
+      );
       this.iceGatheqingStateLatest = this.iceGatheringState;
     });
     this.on("connectionstatechange", () => {
-      this.connectionStateTailHistory = this.logger.putLog(this.connectionStateHeadHistory, this.connectionStateTailHistory, `${this.connectionState} <- ${this.connectionStateLatest}`);
+      this.connectionStateTailHistory = this.putLog("connectionState", this.connectionStateHeadHistory, this.connectionStateTailHistory, `${this.connectionState} <- ${this.connectionStateLatest}`);
       this.connectionStateLatest = this.connectionState;
     });
     this.on("icecandidateerror", (e) => {
-      this.iceEventTailHistory = this.logger.putLog(this.iceEventHeadHistory, this.iceEventTailHistory, `icecandidateerror(${e.errorCode}) ${e.errorText}`);
+      this.iceEventTailHistory = this.putLog("iceEvent", this.iceEventHeadHistory, this.iceEventTailHistory, `icecandidateerror(${e.errorCode}) ${e.errorText}`);
       if (e.errorCode !== 600 && e.errorCode !== 701) console.error(e);
     });
 
@@ -780,6 +830,14 @@ class Peer extends RTCPeerConnection {
 
     /** @type {"stable"|"unstable"} */
     this.stability = "stable";
+  }
+
+  /**
+   * @private
+   */
+  putLog(type, headHistory, tailHistory, msg) {
+    const conn_id = this.connection_id == "" ? "sfu" : this.connection_id;
+    return this.logger.putLog(`Peer(${conn_id})`, type, headHistory, tailHistory, msg);
   }
 
   /**
@@ -1002,33 +1060,6 @@ class Peer extends RTCPeerConnection {
   /**
    * @private
    */
-  getIceInfo(stats) {
-    /** @type {CandidatePair[]} */
-    const pairs = [];
-    /** @type {Object.<string, {networkType: string, protocol: string, relayProtocol: string, candidateType: string}>} */
-    const localCandidates = {};
-
-    stats.forEach((s) => {
-      if (s.type === "candidate-pair") {
-        /** @type {CandidatePair} */
-        const { id, localCandidateId, availableOutgoingBitrate, availableIncomingBitrate } = s;
-        pairs.push({ id, localCandidateId, availableOutgoingBitrate, availableIncomingBitrate });
-      } else if (s.type === "local-candidate") {
-        /** @type {{networkType: string, protocol: string, relayProtocol: string, candidateType: string}} */
-        const { networkType, protocol, relayProtocol, candidateType } = s;
-        localCandidates[s.id] = { networkType, protocol, relayProtocol, candidateType };
-      }
-    });
-    pairs.forEach((pair) => {
-      const { networkType, protocol, relayProtocol, candidateType } = localCandidates[pair.localCandidateId];
-      const { id, availableOutgoingBitrate, availableIncomingBitrate } = pair;
-      this.iceInfo.push({ id, availableOutgoingBitrate, availableIncomingBitrate, networkType, protocol, relayProtocol, candidateType });
-    });
-  }
-
-  /**
-   * @private
-   */
   async monitor() {
     const stats = await this.getStats();
     /** @type {RTCStats[]} */
@@ -1036,9 +1067,7 @@ class Peer extends RTCPeerConnection {
     stats.forEach((s) => {
       statsArray.push(s);
     });
-    this.statsHistory = this.logger.putLog(null, this.statsHistory, JSON.stringify(statsArray));
-
-    this.getIceInfo(stats);
+    this.statsHistory = this.logger.putLog("Client", "stats", null, this.statsHistory, JSON.stringify(statsArray));
 
     /** @type {ChangeStabilityObj} */
     const obj = { connection_id: this.connection_id, stability: "icestable" };
@@ -1106,7 +1135,7 @@ class WS extends WebSocket {
    * @param {object} e
    */
   onMessage(e) {
-    this.recvTailHistory = this.logger.putLog(this.recvHeadHistory, this.recvTailHistory, e.data);
+    this.recvTailHistory = this.logger.putLog("WebSocket", "recvMessage", this.recvHeadHistory, this.recvTailHistory, e.data);
 
     this.lastReceived = new Date().getTime();
 
@@ -1125,7 +1154,7 @@ class WS extends WebSocket {
     const msg = JSON.stringify(message);
     super.send(msg);
 
-    this.sendTailHistory = this.logger.putLog(this.sendHeadHistory, this.sendTailHistory, msg);
+    this.sendTailHistory = this.logger.putLog("WebSocket", "sendMessage", this.sendHeadHistory, this.sendTailHistory, msg);
   }
 
   /**
@@ -1442,57 +1471,6 @@ class SDKErrorEvent extends CustomEvent {
    */
   toReportString() {
     return this.errdata.toReportString();
-  }
-}
-
-/**
- * Safari が EventTarget を継承できないので Polyfill
- * Client が動く程度の範囲で実装
- *
- * @public
- * @class ET
- */
-class ET {
-  /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions */
-
-  constructor() {
-    /** @type {Map<string, EventListenerWithOptions[]>} */
-    this.listeners = new Map();
-  }
-
-  /**
-   * @param {string} type
-   * @param {EventListener} listener
-   * @param {AddEventListenerOptions} options
-   */
-  addEventListener(type, listener, options = {}) {
-    const listeners = this.listeners.get(type) || [];
-    listeners.push({ listener, options });
-    this.listeners.set(type, listeners);
-  }
-
-  /**
-   * @param {Event} event
-   */
-  dispatchEvent(event) {
-    const listeners = this.listeners.get(event.type) || [];
-    listeners.forEach(({ listener, options }) => {
-      listener.call(this, event);
-      if (!options.once) return;
-      this.removeEventListener(event.type, listener, options);
-    });
-  }
-
-  /**
-   *
-   * @param {string} type
-   * @param {EventListener} func
-   * @param {AddEventListenerOptions} options
-   */
-  removeEventListener(type, func, options = {}) {
-    const listeners = this.listeners.get(type) || [];
-    const removed = listeners.filter(({ listener }) => listener !== func);
-    this.listeners.set(type, removed);
   }
 }
 
@@ -1896,11 +1874,6 @@ class Client extends ET {
    * @returns {string}
    */
   getTailReport() {
-    if (this.sfupc) {
-      this.sfupc.iceInfo.forEach((info) => {
-        this.putLog("debug", JSON.stringify(info));
-      });
-    }
     const report = new Report("last 5 minutes log");
     report.addHistory("Client___", "state_____________", this.stateTailHistory);
     report.addHistory("Websocket", "event_____________", this.wsEventTailHistory);
@@ -1974,6 +1947,7 @@ class Client extends ET {
         if (option.iceServersProtocol !== undefined) this.userIceServersProtocol = option.iceServersProtocol;
 
         this.logger = new Logger({ headperiod: 5 * 60 * 1000, tailperiod: 5 * 60 * 1000 });
+        this.logger.addEventListener("logged", this.onLogged.bind(this));
         this.putLog("debug", `UA: ${window.navigator.userAgent}`);
         this.putLog("debug", `API Call: connect - ${JSON.stringify(option)}`);
         this.ws = new WS(option.signalingURL || SIGNALING_URL, this.logger);
@@ -2853,6 +2827,13 @@ class Client extends ET {
   /**
    * @private
    */
+  onLogged(e) {
+    this.emit("log", { msg: e.detail.log, category: e.detail.category, subcategory: e.detail.subcategory, date: e.detail.date });
+  }
+
+  /**
+   * @private
+   */
   onWSOpen() {
     this.withErr(61010, () => {
       this.putLog("wsevent", "wsopen");
@@ -2862,7 +2843,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.7.1+20230615" },
+        sdk_info: { platform: "web", version: "1.8.0+20231201" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -3648,9 +3629,9 @@ class Client extends ET {
    */
   putLog(type, msg) {
     if (!this.logger) return;
-    if (type === "state") this.stateTailHistory = this.logger.putLog(this.stateHeadHistory, this.stateTailHistory, msg);
-    else if (type === "wsevent") this.wsEventTailHistory = this.logger.putLog(this.wsEventHeadHistory, this.wsEventTailHistory, msg);
-    else this.debugInfoTailHistory = this.logger.putLog(this.debugInfoHeadHistory, this.debugInfoTailHistory, msg);
+    if (type === "state") this.stateTailHistory = this.logger.putLog("Client", "state", this.stateHeadHistory, this.stateTailHistory, msg);
+    else if (type === "wsevent") this.wsEventTailHistory = this.logger.putLog("WebSocket", "event", this.wsEventHeadHistory, this.wsEventTailHistory, msg);
+    else this.debugInfoTailHistory = this.logger.putLog("DebugInfo", "debugInfo", this.debugInfoHeadHistory, this.debugInfoTailHistory, msg);
   }
 }
 
