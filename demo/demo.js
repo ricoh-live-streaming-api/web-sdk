@@ -64,10 +64,11 @@ function createClient() {
   client.on("connecting", () => {
     console.log(client.getState());
   });
-  client.on("open", ({ access_token_json }) => {
+  client.on("open", ({ access_token_json, connections_status }) => {
     console.log(client.getState());
     const connection_id = JSON.parse(access_token_json).connection_id;
     console.log("connection_id: ", connection_id);
+    console.log("connections_status receiver_existence: ", connections_status.video.receiver_existence);
   });
   client.on("closing", () => {
     console.log(client.getState());
@@ -81,6 +82,9 @@ function createClient() {
   client.on("error", (e) => {
     console.table(e.detail);
     console.log(e.toReportString());
+  });
+  client.on("mediaopen", (e) => {
+    console.log("mediaopen");
   });
   client.on("addremoteconnection", ({ connection_id, meta }) => {
     console.log(`add: ${connection_id}`);
@@ -116,9 +120,15 @@ function createClient() {
     console.log(`updatemute: ${connection_id} ${mediaStreamTrack.kind}`);
     console.log(mute);
   });
-  client.on("changestability", ({ connection_id, stability }) => {
-    console.log(`changestability: ${connection_id} ${stability}`);
+
+  client.on("updateconnectionsstatus", ({ connections_status }) => {
+    console.log(`updateconnectionsstatus receiver_existence: ${connections_status.video.receiver_existence}`);
   });
+
+  client.on("changemediastability", ({ connection_id, stability }) => {
+    console.log(`changemediastability: ${connection_id} ${stability}`);
+  });
+
   client.on("addremotetrack", async ({ connection_id, mediaStreamTrack, stream, meta, mute }) => {
     console.log(connection_id, mediaStreamTrack, stream, meta, mute);
     let $video = $(`#${connection_id}`);
@@ -136,9 +146,14 @@ function createClient() {
     }
     await $video.play();
   });
+
   client.on("updateremotetrack", ({ connection_id, mediaStreamTrack, stream, meta }) => {
     console.log(connection_id, mediaStreamTrack, stream, meta);
   });
+  client.on("log", ({ msg, category, subcategory, date }) => {
+    // if (type != "stats") console.log(`[${date.toISOString()}]\t"${category}",\t"${subcategory}",\t${msg}`);
+  });
+
   client.on("log", ({ msg, category, subcategory, date }) => {
     // if (type != "stats") console.log(`[${date.toISOString()}]\t"${category}",\t"${subcategory}",\t${msg}`);
   });

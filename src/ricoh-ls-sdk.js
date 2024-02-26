@@ -15,7 +15,7 @@
  * @property {ConnectionReceivingOptions} receiving
  * @property {ConnectionSendingOptionsUser} sending
  * @property {"relay"|"all"} iceTransportPolicy
- * @property {"all"|"udp"|"tcp"|"tls"} iceServersProtocol
+ * @property {"all"|"udp"|"tcp"|"tls"|"tcp_tls"} iceServersProtocol
  */
 
 /**
@@ -326,6 +326,22 @@
  */
 
 /**
+ * @typedef {object} ConnectionsVideoStatus
+ * @property {boolean} receiver_existence
+ */
+
+/**
+ * @typedef {object} ConnectionsStatus
+ * @property {ConnectionsVideoStatus} video
+ */
+
+/**
+ * @typedef {object} NotifySFUConnectionsUpdateMessage
+ * @property {"notify.sfu.track.update"} message_type
+ * @property {ConnectionsStatus} connections_status
+ */
+
+/**
  * @typedef {object} ErrorMessage
  * @property {"error"} message_type
  * @property {string} client_message_type
@@ -384,6 +400,11 @@
  */
 
 /**
+ * @typedef {object} UpdateConnectionsStatusObj
+ * @property {ConnectionsStatus} connections_status
+ */
+
+/**
  * @typedef {object} UpdateMuteObj
  * @property {ConnectionID} connection_id
  * @property {MediaStreamTrack|null|undefined} mediaStreamTrack
@@ -438,7 +459,7 @@ const SIGNALING_URL = "wss://signaling.livestreaming.mw.smart-integration.ricoh.
  * Client の Event Type
  *
  * @public
- * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updatemute" | "changestability"} EventType
+ * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" |  "updatemute" | "changestability" | "mediaopen" | "changemediastability"} EventType
  */
 
 /**
@@ -517,9 +538,9 @@ class ET {
  * Log出力 クラス
  *
  * @private
- * @extends ET
+ * @extends EventTarget*
  */
-class Logger extends ET {
+class Logger extends EventTarget {
   /**
    * @param {{headperiod: number, tailperiod: number}} option
    */
@@ -795,7 +816,10 @@ class Peer extends RTCPeerConnection {
         `${this.iceConnectionState} <- ${this.iceConnectionStateLatest}`,
       );
       this.iceConnectionStateLatest = this.iceConnectionState;
-      if (this.iceConnectionState === "connected") this.iceConnectState = "connected";
+      if (this.iceConnectionState === "connected") {
+        this.iceConnectState = "connected";
+        this.emit("iceconnected", {});
+      }
     });
     this.on("icegatheringstatechange", () => {
       this.iceGatheringStateTailHistory = this.putLog(
@@ -811,7 +835,8 @@ class Peer extends RTCPeerConnection {
       this.connectionStateLatest = this.connectionState;
     });
     this.on("icecandidateerror", (e) => {
-      this.iceEventTailHistory = this.putLog("iceEvent", this.iceEventHeadHistory, this.iceEventTailHistory, `icecandidateerror(${e.errorCode}) ${e.errorText}`);
+      const errstr = `icecandidateerror(${e.errorCode}) ${e.errorText}, ${e.address}:${e.port}, ${e.url}`;
+      this.iceEventTailHistory = this.putLog("iceEvent", this.iceEventHeadHistory, this.iceEventTailHistory, errstr);
       if (e.errorCode !== 600 && e.errorCode !== 701) console.error(e);
     });
 
@@ -830,6 +855,17 @@ class Peer extends RTCPeerConnection {
 
     /** @type {"stable"|"unstable"} */
     this.stability = "stable";
+
+    /** @type {boolean} */
+    this.iceSucceeded = false;
+  }
+
+  /**
+   * @private
+   */
+  putLog(type, headHistory, tailHistory, msg) {
+    const conn_id = this.connection_id == "" ? "sfu" : this.connection_id;
+    return this.logger.putLog(`Peer(${conn_id})`, type, headHistory, tailHistory, msg);
   }
 
   /**
@@ -1021,16 +1057,22 @@ class Peer extends RTCPeerConnection {
   }
 
   /**
-   * 受信した Offer を適用し、 Answer を生成し適用してから返す
-   *
    * @public
    * @param {RTCSessionDescription} offer
-   * @param {RTCAnswerOptions} [options={}]
+   * @return {Promise<RTCSessionDescriptionInit>}
+   */
+  async createAnswerSDP(offer) {
+    await this.setRemoteDescription(offer);
+    return await super.createAnswer();
+  }
+
+  /**
+   * @public
+   * @param {RTCSessionDescriptionInit} answer
    * @return {Promise<RTCSessionDescription|null>}
    */
-  async getAnswer(offer, options) {
-    await this.setRemoteDescription(offer);
-    await this.setLocalDescription(await super.createAnswer());
+  async setAnswerSDP(answer) {
+    await this.setLocalDescription(answer);
     if (this.localDescription) return new RTCSessionDescription(this.localDescription);
     return null;
   }
@@ -1060,8 +1102,31 @@ class Peer extends RTCPeerConnection {
   /**
    * @private
    */
+  iceConnectionSuccessLog(stats) {
+    const pairs = [];
+    stats.forEach((stat) => {
+      if (stat.type === "candidate-pair") pairs.push(stat);
+    });
+    stats.forEach((stat) => {
+      if (stat.type == "local-candidate") {
+        pairs.forEach((pair) => {
+          if (pair.localCandidateId === stat.id) pair.local = stat;
+        });
+      }
+    });
+    pairs.forEach((pair) => {
+      const local = pair.local;
+      const logstr = `ice success: ${pair.id}(${pair.state}):${local.networkType}, ${local.candidateType}(${local.relayProtocol}), ${local.url}`;
+      this.iceEventTailHistory = this.putLog("iceEvent", this.iceEventHeadHistory, this.iceEventTailHistory, logstr);
+    });
+  }
+
+  /**
+   * @private
+   */
   async monitor() {
     const stats = await this.getStats();
+
     /** @type {RTCStats[]} */
     const statsArray = [];
     stats.forEach((s) => {
@@ -1079,6 +1144,11 @@ class Peer extends RTCPeerConnection {
         this.emit("changestability", obj);
         this.iceConnectState = "timeout";
       }
+    }
+
+    if (this.connectionState === "connected" && this.iceSucceeded == false) {
+      this.iceSucceeded = true;
+      this.iceConnectionSuccessLog(stats);
     }
 
     if (this.connectionState === "connected" && this.stability === "unstable") {
@@ -1480,11 +1550,9 @@ class SDKErrorEvent extends CustomEvent {
  *
  * @public
  * @class Client
- * @extends ET
+ * @extends EventTarget
  */
-class Client extends ET {
-  // TODO: Safari が EventTarget を継承できるようになったら直す
-
+class Client extends EventTarget {
   constructor() {
     super();
 
@@ -1636,7 +1704,7 @@ class Client extends ET {
 
     /**
      * @private
-     * @type {"all"|"udp"|"tcp"|"tls"|null}
+     * @type {"all"|"udp"|"tcp"|"tls"|"tcp_tls"|null}
      */
     this.userIceServersProtocol = null;
 
@@ -1699,6 +1767,12 @@ class Client extends ET {
      * @type {boolean}
      */
     this.apiReady = false;
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.mediaOpened = false;
 
     this.wscancel = false;
 
@@ -1974,6 +2048,7 @@ class Client extends ET {
         this.ws.on("notify.connection.update", this.onNotifyConnectionUpdate.bind(this));
 
         this.ws.on("notify.sfu.track.update", this.onNotifySFUTrackUpdate.bind(this));
+        this.ws.on("notify.sfu.connections.update", this.onNotifySFUConnectionsUpdate.bind(this));
 
         this.ws.on("ping", this.onPing.bind(this));
         this.ws.on("error", this.onError.bind(this));
@@ -2745,6 +2820,17 @@ class Client extends ET {
 
   /**
    * @private
+   * @param {{}} e
+   */
+  onIceConnected(e) {
+    if (!this.mediaOpened) {
+      this.emit("mediaopen", {});
+      this.mediaOpened = true;
+    }
+  }
+
+  /**
+   * @private
    * @param {{id: string, kind: string}} e
    */
   onTrackDisconnected(e) {
@@ -2761,6 +2847,7 @@ class Client extends ET {
       this.emitError(54001, "IceConnectionTimeout", e);
     } else {
       this.emit("changestability", { connection_id, stability: e.stability });
+      this.emit("changemediastability", { connection_id, stability: e.stability });
     }
   }
 
@@ -2798,13 +2885,15 @@ class Client extends ET {
 
   /**
    * @private
-   * @param {"all"|"udp"|"tcp"|"tls"} ice
+   * @param {"all"|"udp"|"tcp"|"tls"|"tcp_tls"} ice
    * @returns {ConnectionConnectingOptions}
    */
   makeConnecting(ice) {
     /** @type {ConnectionConnectingOptions} */
     const connecting = {};
-    connecting.turn_protocols = ice === "all" ? ["udp", "tcp", "tls"] : [ice];
+    if (ice === "all") connecting.turn_protocols = ["udp", "tcp", "tls"];
+    else if (ice === "tcp_tls") connecting.turn_protocols = ["tcp", "tls"];
+    else connecting.turn_protocols = [ice];
     return connecting;
   }
 
@@ -2812,7 +2901,7 @@ class Client extends ET {
    * @private
    * @param {ConnectionSendingOptionsUser|null} send
    * @param {ConnectionReceivingOptions|null} recv
-   * @param {"all"|"udp"|"tcp"|"tls"|null} ice
+   * @param {"all"|"udp"|"tcp"|"tls"|"tcp_tls"|null} ice
    * @returns {ConnectOptions}
    */
   makeConnectMessageOptions(send, recv, ice) {
@@ -2843,7 +2932,7 @@ class Client extends ET {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.8.0+20231201" },
+        sdk_info: { platform: "web", version: "1.9.0+20240122" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -2867,6 +2956,7 @@ class Client extends ET {
       { code: 1000, retcode: 0, error: "" },
       { code: 3002, retcode: 53002, error: "ConnectionClosedByApplication" },
       { code: 3003, retcode: 53003, error: "MaxRoomPeriodExceeded" },
+      { code: 3004, retcode: 53004, error: "ConnectionClosedByServer" },
       { code: 3601, retcode: 53601, error: "ConnectionLimitExceeded" },
       { code: 3719, retcode: 53719, error: "ConnectionCreateTimeout" },
       { code: 3806, retcode: 53806, error: "ServerUnavailable" },
@@ -2890,7 +2980,7 @@ class Client extends ET {
     if (error === "paramerr") {
       const paramerr = this.getParamError(e.code);
       if (paramerr) this.emitError(40000 + e.code, paramerr.err, e);
-      else this.internalError(61046, e);
+      else this.internalError(65000 + e.code, e); // This was once 61046
     } else if (error !== "") {
       if (!this.wscancel) this.emitError(code, error, e);
     }
@@ -2918,6 +3008,7 @@ class Client extends ET {
    */
   onConnectSuccess(e) {
     let access_token_json = "";
+    let connections_status = {};
 
     this.withErr(
       61013,
@@ -2925,12 +3016,13 @@ class Client extends ET {
         if (this.state !== "connecting") return; // do nothing
         const { ice_servers, room_session_id } = e;
         access_token_json = JSON.stringify(e.access_token_info);
+        connections_status = e.connections_status;
         this.roomSpecType = e.access_token_info.room_spec.type;
         this.rtcConfiguration.iceServers = ice_servers;
         this.room_session_id = room_session_id;
       },
       () => {
-        this.setState("open", "open", { access_token_json });
+        this.setState("open", "open", { access_token_json, connections_status });
         const now = new Date().getTime();
         e.connections.forEach((connection) => {
           const { connection_id, tags } = connection;
@@ -3130,7 +3222,9 @@ class Client extends ET {
         await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
       });
 
-      const answer = await peer.getAnswer(sdp);
+      const answerSDP = await peer.createAnswerSDP(sdp);
+      this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+      const answer = await peer.setAnswerSDP(answerSDP);
       this.ws?.sendMessage({
         message_type: "p2p.answer",
         peer_connection_id,
@@ -3224,6 +3318,7 @@ class Client extends ET {
       this.sfupc.on("icecandidate", this.onIceCandidateSFU.bind(this));
       this.sfupc.on("changestability", this.onChangeStability.bind(this));
       this.sfupc.on("trackconnected", this.onTrackConnected.bind(this));
+      this.sfupc.on("iceconnected", this.onIceConnected.bind(this));
       this.sfupc.on("trackdisconnected", this.onTrackDisconnected.bind(this));
 
       if (this.sendrecv !== "recvonly") {
@@ -3238,7 +3333,9 @@ class Client extends ET {
         await this.replaceLSTrack(v.mediaStreamTrack, v.localLSTrack);
       });
 
-      const answer = await this.sfupc.getAnswer(sdp);
+      const answerSDP = await this.sfupc.createAnswerSDP(sdp);
+      this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+      const answer = await this.sfupc.setAnswerSDP(answerSDP);
       this.ws?.sendMessage({
         message_type: "sfu.answer",
         sdp: answer,
@@ -3271,7 +3368,9 @@ class Client extends ET {
       const { sdp } = e;
       if (this.sfupc && this.ws) {
         this.sfupc.setRemoteTrackMetadata(e.remote_track_metadata);
-        const answer = await this.sfupc.getAnswer(sdp);
+        const answerSDP = await this.sfupc.createAnswerSDP(sdp);
+        this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+        const answer = await this.sfupc.setAnswerSDP(answerSDP);
         this.ws.sendMessage({
           message_type: "sfu.update_answer",
           sdp: answer,
@@ -3349,6 +3448,25 @@ class Client extends ET {
       () => {
         if (Object.keys(meta).length && onTrackArrived) this.emit("updateremotetrack", objUpdateRemoteTrack);
         if (muteState && onTrackArrived) this.emit("updatemute", objUpdateMute);
+      },
+    );
+  }
+
+  /**
+   * @private
+   * @param {NotifySFUConnectionsUpdateMessage} e
+   */
+  onNotifySFUConnectionsUpdate(e) {
+    /** @type {UpdateConnectionsStatusObj} */
+    let objUpdateConnectionsStatus;
+    this.withErr(
+      61051,
+      () => {
+        const { connections_status } = e;
+        objUpdateConnectionsStatus = { connections_status };
+      },
+      () => {
+        this.emit("updateconnectionsstatus", objUpdateConnectionsStatus);
       },
     );
   }
@@ -3524,6 +3642,7 @@ class Client extends ET {
   getSignalingError(code) {
     const errmap = new Map([
       //[0, { err: ""}], // Server がサポートしていない、または State で許可されていない message_type のメッセージを送信した
+      [1, { err: "" }], // [InternalErrorとせずIgnore] P2PRoom で、指定された peer_connection_id が存在しない
       //[100, { err: ""}], // tags が配列でない
       //[101, { err: ""}], // tags 内に同じ source と name の組の tag が存在
       //[102, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない

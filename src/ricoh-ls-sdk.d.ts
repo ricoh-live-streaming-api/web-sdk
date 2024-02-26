@@ -27,7 +27,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    * Client の Event Type
    *
    * @public
-   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updatemute" | "changestability"  | "log"} EventType
+   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" | "updatemute" | "changestability" | "mediaopen" | "changemediastability" | "log"} EventType
    */
   type EventType =
     | "connecting"
@@ -41,6 +41,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     | "addremoteconnection"
     | "removeremoteconnection"
     | "updateremoteconnection"
+    | "updateconnectionsstatus"
     | "updatemute"
     | "changestability"
     | "log";
@@ -92,7 +93,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     /**
      * iceServers protocol
      */
-    iceServersProtocol?: "all" | "udp" | "tcp" | "tls";
+    iceServersProtocol?: "all" | "udp" | "tcp" | "tls" | "tcp_tls";
   }
 
   /**
@@ -112,6 +113,14 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * mute state
      */
     mute?: MuteType;
+  }
+
+  interface ConnectionsVideoStatus {
+    receiver_existence: boolean;
+  }
+
+  interface ConnectionsStatus {
+    video: ConnectionsVideoStatus;
   }
 
   /**
@@ -172,6 +181,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
   interface LSConnectingEvent extends Event {}
   interface LSOpenEvent extends Event {
     access_token_json: string;
+    connections_status?: Object;
   }
   interface LSClosingEvent extends Event {}
   interface LSCloseEvent extends Event {}
@@ -215,6 +225,9 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     stream: MediaStream;
     mute: MuteType;
   }
+  interface LSUpdateConnectionsStatusEvent extends Event {
+    connections_status: ConnectionsStatus;
+  }
   interface LSLogEvent extends Event {
     msg: string;
     category: string;
@@ -236,6 +249,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     changestability: LSChangeStabilityEvent;
     addlocaltrack: LSAddLocalTrackEvent;
     updatemute: LSUpdateMuteEvent;
+    updateconnectionsstatus: LSUpdateConnectionsStatusEvent;
     log: LSLogEvent;
   }
 
