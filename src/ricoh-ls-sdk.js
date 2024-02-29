@@ -2932,7 +2932,7 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.9.0+20240122" },
+        sdk_info: { platform: "web", version: "1.9.1+20240229" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);

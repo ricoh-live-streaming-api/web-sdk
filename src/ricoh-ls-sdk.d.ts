@@ -43,7 +43,9 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     | "updateremoteconnection"
     | "updateconnectionsstatus"
     | "updatemute"
+    | "mediaopen"
     | "changestability"
+    | "changemediastability"
     | "log";
 
   type VideoCodecType = "h264" | "vp8" | "vp9" | "h265" | "av1";
@@ -215,6 +217,10 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     connection_id: string;
     stability: string;
   }
+  interface LSChangeMediaStabilityEvent extends Event {
+    connection_id: string;
+    stability: string;
+  }
   interface LSAddLocalTrackEvent extends Event {
     mediaStreamTrack: MediaStreamTrack;
     stream: MediaStream;
@@ -228,6 +234,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
   interface LSUpdateConnectionsStatusEvent extends Event {
     connections_status: ConnectionsStatus;
   }
+  interface LSMediaOpenEvent extends Event {}
   interface LSLogEvent extends Event {
     msg: string;
     category: string;
@@ -247,9 +254,11 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     addremotetrack: LSAddRemoteTrackEvent;
     updateremotetrack: LSUpdateRemoteTrackEvent;
     changestability: LSChangeStabilityEvent;
+    changemediastability: LSChangeMediaStabilityEvent;
     addlocaltrack: LSAddLocalTrackEvent;
     updatemute: LSUpdateMuteEvent;
     updateconnectionsstatus: LSUpdateConnectionsStatusEvent;
+    mediaopen: LSMediaOpenEvent;
     log: LSLogEvent;
   }
 
