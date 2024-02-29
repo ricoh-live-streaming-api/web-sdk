@@ -213,3 +213,8 @@
   - ログの ICE (WebRTC の接続試行) 関連の情報を強化しました
   - Client などイベントを発行するクラスが[EventTarget](https://developer.mozilla.org/ja/docs/Web/API/EventTarget)を継承するようになりました。EventTarget に対応していない古いブラウザ(Safari13 以前など)では動作しないようになります
   - P2PRoom への connect 時に対向 connection が退室すると InternalError が発生することがある問題を修正しました
+
+## v1.9.1
+- SDK 修正
+  - 一部追加イベントに対して型定義が追従できていなかった問題を修正しました
+  
