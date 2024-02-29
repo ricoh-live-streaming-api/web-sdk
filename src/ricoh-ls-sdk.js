@@ -2932,7 +2932,7 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.9.1+20240229" },
+        sdk_info: { platform: "web", version: "1.9.2+20240229" },
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -2982,7 +2982,8 @@ class Client extends EventTarget {
       if (paramerr) this.emitError(40000 + e.code, paramerr.err, e);
       else this.internalError(65000 + e.code, e); // This was once 61046
     } else if (error !== "") {
-      if (!this.wscancel) this.emitError(code, error, e);
+      const ignore53004 = code === 53004 && (this.state === "closing" || this.state === "closed");
+      if (!this.wscancel && !ignore53004) this.emitError(code, error, e);
     }
 
     if (this.sfupc) {
