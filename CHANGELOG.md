@@ -204,10 +204,10 @@
 - API 変更
   - [NetworkError](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)に SFU が WebRTC 接続を切断判定した場合のエラー 53004 ConnectionClosedByServer を追加しました
   - (SFURoom のみ) SFU とのメディア接続が確立した際に発行する[イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)である mediaopen を追加しました。[getStats](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) が実行可能か判断するトリガーや、以降 [53719 ConnectionCreateTimeout](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) が発生しないことの確認などに使用できます
-  - (β) ある connection から見て自分が送信している映像を受信している対向 connection の有無をイベントで通知するようになりました
+  - ある connection から見て自分が送信している映像を受信している対向 connection の有無をイベントで通知するようになりました
     - 対向の入室や受信モードなどに応じて有無は変化します
     - [updateconnectionsstatus イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)の video.receiver_existence で判断できるようになります
-  - (β) [connect の options](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#connect) の iceServersProtocol に"tcp_tls"が指定できるようになりました。TURN の TCP か TLS が自動で選択されるようになります
+  - [connect の options](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#connect) の iceServersProtocol に"tcp_tls"が指定できるようになりました。TURN の TCP か TLS が自動で選択されるようになります
 - SDK 修正
   - **破壊的変更予定** changestability イベントを changemediastability イベントに変更しました (mediaopen イベントと合わせるため)。現時点では changestability イベントも引き続き使用できますが、今後廃止予定ですので移行をお願いします
   - ログの ICE (WebRTC の接続試行) 関連の情報を強化しました
