@@ -150,10 +150,9 @@ function createClient() {
   client.on("updateremotetrack", ({ connection_id, mediaStreamTrack, stream, meta }) => {
     console.log(connection_id, mediaStreamTrack, stream, meta);
   });
-  client.on("log", ({ msg, category, subcategory, date }) => {
-    // if (type != "stats") console.log(`[${date.toISOString()}]\t"${category}",\t"${subcategory}",\t${msg}`);
+  client.on("updaterecording", ({ in_recording }) => {
+    console.log(`updaterecording: ${in_recording}`);
   });
-
   client.on("log", ({ msg, category, subcategory, date }) => {
     // if (type != "stats") console.log(`[${date.toISOString()}]\t"${category}",\t"${subcategory}",\t${msg}`);
   });
@@ -175,9 +174,9 @@ $("#stop").addEventListener("click", async (e) => {
 });
 
 $("#start").addEventListener("click", async (e) => {
-  let type = "p2p";
-  if (window.location.search.match(/type=sfu/)) type = "sfu";
-  else if (window.location.search.match(/type=p2p_turn/)) type = "p2p_turn";
+  let type = "sfu";
+  if (window.location.search.match(/type=p2p_turn/)) type = "p2p_turn";
+  else if (window.location.search.match(/type=p2p/)) type = "p2p";
 
   $("#type").innerText = type;
 
@@ -201,11 +200,13 @@ $("#start").addEventListener("click", async (e) => {
 
   try {
     client = createClient();
+
     const connectOption = {
       sending: { video: { codec: "vp8", maxBitrateKbps: sendrate } },
       // iceServersProtocol: "tls",
       meta: { metaexample2: "connection_metadata" },
     };
+
     const sendrecv = $("input:checked[name=sendrecv]").value;
     if (sendrecv === "recvonly") {
       connectOption.sending.enabled = false;
@@ -283,6 +284,7 @@ $("#amute").addEventListener("change", async (e) => {
   const mute = $("input:checked[name=amute]").value;
   if ($("#start").disabled) {
     const lsTrack = lsTracks.filter((lsTrack) => lsTrack.mediaStreamTrack.kind === "audio")[0];
+    lsTrack.mediaStreamTrack = null;
     await client.changeMute(lsTrack, mute);
   }
 });

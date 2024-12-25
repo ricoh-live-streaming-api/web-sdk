@@ -215,6 +215,16 @@
  */
 
 /**
+ * @typedef {object} RecordingStatus
+ * @property {boolean} in_recording
+ * /
+
+/**
+ * @typedef {object} RoomStatus
+ * @property {RecordingStatus} recording_status
+ * /
+
+/**
  * @typedef {object} ConnectSuccessMessage
  * @property {"connect_success"} message_type
  * @property {RoomSessionID} room_session_id
@@ -222,6 +232,7 @@
  * @property {Connection[]} connections
  * @property {any} connections_status
  * @property {object} access_token_info
+ * @property {RoomStatus} room_status
  */
 
 /**
@@ -370,6 +381,12 @@
  */
 
 /**
+ * @typedef {object} NotifySFURecordingUpdateMessage
+ * @property {"notify.sfu.recording.update"} message_type
+ * @property {RecordingStatus} recording_status
+ */
+
+/**
  * @typedef {object} ErrorMessage
  * @property {"error"} message_type
  * @property {string} client_message_type
@@ -411,6 +428,7 @@
  * @property {MediaStream} stream
  * @property {Meta[]} [meta]
  * @property {MuteType} [mute]
+ * @property {string} [mid]
  */
 
 /**
@@ -476,6 +494,9 @@
 /** @type {string} */
 const SIGNALING_URL = "wss://signaling.livestreaming.mw.smart-integration.ricoh.com/v1/room";
 
+/** @type {string} */
+const CLIENT_JSON_URL = "https://signaling.livestreaming.mw.smart-integration.ricoh.com/v1/sdk/data/client.json";
+
 /**
  * Client の State Type
  *
@@ -510,57 +531,6 @@ const SIGNALING_URL = "wss://signaling.livestreaming.mw.smart-integration.ricoh.
  * @public
  * @typedef {"normal" | "priority"} SendingMode
  */
-
-/**
- * Safari が EventTarget を継承できないので Polyfill
- * Client が動く程度の範囲で実装
- *
- * @public
- * @class ET
- */
-class ET {
-  /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions */
-
-  constructor() {
-    /** @type {Map&lt;string, EventListenerWithOptions[]>} */
-    this.listeners = new Map();
-  }
-
-  /**
-   * @param {string} type
-   * @param {EventListener} listener
-   * @param {AddEventListenerOptions} options
-   */
-  addEventListener(type, listener, options = {}) {
-    const listeners = this.listeners.get(type) || [];
-    listeners.push({ listener, options });
-    this.listeners.set(type, listeners);
-  }
-
-  /**
-   * @param {Event} event
-   */
-  dispatchEvent(event) {
-    const listeners = this.listeners.get(event.type) || [];
-    listeners.forEach(({ listener, options }) => {
-      listener.call(this, event);
-      if (!options.once) return;
-      this.removeEventListener(event.type, listener, options);
-    });
-  }
-
-  /**
-   *
-   * @param {string} type
-   * @param {EventListener} func
-   * @param {AddEventListenerOptions} options
-   */
-  removeEventListener(type, func, options = {}) {
-    const listeners = this.listeners.get(type) || [];
-    const removed = listeners.filter(({ listener }) => listener !== func);
-    this.listeners.set(type, removed);
-  }
-}
 
 /**
  * Log出力 クラス
@@ -886,14 +856,6 @@ class Peer extends RTCPeerConnection {
 
     /** @type {boolean} */
     this.iceSucceeded = false;
-  }
-
-  /**
-   * @private
-   */
-  putLog(type, headHistory, tailHistory, msg) {
-    const conn_id = this.connection_id == "" ? "sfu" : this.connection_id;
-    return this.logger.putLog(`Peer(${conn_id})`, type, headHistory, tailHistory, msg);
   }
 
   /**
@@ -1311,6 +1273,12 @@ class LSTrack {
      * @type {MuteType}
      */
     this.muteType = "unmute";
+
+    /**
+     * @package
+     * @type {{mediaStreamTrack: MediaStreamTrack|null, mid: string}}
+     */
+    this.storedMid = { mediaStreamTrack: null, mid: "" };
 
     if (option.mute) this.muteType = option.mute;
   }
@@ -1802,9 +1770,29 @@ class Client extends EventTarget {
      */
     this.mediaOpened = false;
 
+    /**
+     * @private
+     * @type {boolean}
+     */
     this.wscancel = false;
 
+    /**
+     * @private
+     * @type {string}
+     */
     this.trackReport = "";
+
+    /**
+     * @private
+     * @type {Map&lt;string, string>}
+     */
+    this.parameterErrorTable = new Map();
+
+    /**
+     * @private
+     * @type {Map&lt;string, string>}
+     */
+    this.signalingErrorTable = new Map();
   }
 
   /**
@@ -1938,6 +1926,39 @@ class Client extends EventTarget {
   }
 
   /**
+   * LSTrack(local_track) に対するmidを取得する
+   *
+   * @public
+   * @param {LSTrack} [lsTrack]
+   * @param {ConnectionID} [connection_id]
+   * @returns {string}
+   */
+  getLocalTrackMid(lsTrack, connection_id) {
+    this.putLog("debug", "API Call: getLocalTrackMid");
+    if (!lsTrack) throw new SDKError(new ErrorData(45026, "InvalidTrackOnGetLocalTrackMid"));
+
+    return this.withErr(61054, () => {
+      if (lsTrack.storedMid.mediaStreamTrack === lsTrack.mediaStreamTrack &amp;&amp; lsTrack.storedMid.mid !== "") return lsTrack.storedMid.mid;
+
+      let transceivers = [];
+      if (connection_id === "sfu" &amp;&amp; this.isSfuRoom()) {
+        transceivers = transceivers.concat(this.sfupc?.getTransceivers());
+      }
+      this.peers.forEach((peer) => {
+        if (peer.connection_id === connection_id) transceivers = transceivers.concat(peer.getTransceivers());
+      });
+
+      for (const transceiver of transceivers) {
+        if (transceiver.sender?.track?.id === lsTrack.mediaStreamTrack.id) {
+          lsTrack.storedMid = { mediaStreamTrack: lsTrack.mediaStreamTrack, mid: transceiver.mid };
+          return transceiver.mid;
+        }
+      }
+      return "";
+    });
+  }
+
+  /**
    * 開始数分のログを取得する
    *
    * @public
@@ -2048,12 +2069,8 @@ class Client extends EventTarget {
         if (option.iceTransportPolicy) this.userIceTransportPolicy = option.iceTransportPolicy;
         if (option.iceServersProtocol !== undefined) this.userIceServersProtocol = option.iceServersProtocol;
 
-        this.logger = new Logger({ headperiod: 5 * 60 * 1000, tailperiod: 5 * 60 * 1000 });
-        this.logger.addEventListener("logged", this.onLogged.bind(this));
-        this.putLog("debug", `UA: ${window.navigator.userAgent}`);
         this.putLog("debug", `API Call: connect - ${JSON.stringify(option)}`);
         this.ws = new WS(option.signalingURL || SIGNALING_URL, this.logger);
-        this.setState("connecting", "connecting");
 
         // standard events
         this.ws.addEventListener("open", this.onWSOpen.bind(this));
@@ -2077,6 +2094,7 @@ class Client extends EventTarget {
 
         this.ws.on("notify.sfu.track.update", this.onNotifySFUTrackUpdate.bind(this));
         this.ws.on("notify.sfu.connections.update", this.onNotifySFUConnectionsUpdate.bind(this));
+        this.ws.on("notify.sfu.recording.update", this.onNotifySFURecordingUpdate.bind(this));
 
         this.ws.on("ping", this.onPing.bind(this));
         this.ws.on("error", this.onError.bind(this));
@@ -2140,7 +2158,41 @@ class Client extends EventTarget {
     const { code, error } = this.checkConnectErr(option);
     if (error !== "") throw new SDKError(new ErrorData(code, error));
 
-    this.connectMain(client_id, access_token, option);
+    this.logger = new Logger({ headperiod: 5 * 60 * 1000, tailperiod: 5 * 60 * 1000 });
+    this.logger.addEventListener("logged", this.onLogged.bind(this));
+    this.putLog("debug", `UA: ${window.navigator.userAgent}`);
+
+    this.setState("connecting", "connecting");
+
+    fetch(CLIENT_JSON_URL)
+      .catch((e) => {
+        this.putLog("debug", `Fetch Exception: ${e}`);
+        throw new SDKError(new ErrorData(54003, "PreConnectError", e));
+      })
+      .then((res) => {
+        if (!res.ok) {
+          this.putLog("debug", `Fetch HTTP Error: ${res}`);
+          throw new SDKError(new ErrorData(54003, "PreConnectError", res));
+        } else return res.json();
+      })
+      .then((json) => {
+        this.parameterErrorTable = json.parameterError;
+        this.signalingErrorTable = json.signalingError;
+        if (Object.keys(this.parameterErrorTable).length === 0 || Object.keys(this.signalingErrorTable).length === 0) {
+          throw new Error("Data API file broken");
+        }
+        return true;
+      })
+      .catch((e) => {
+        if (e instanceof SDKError) this.emitError(e.errdata.getDetail().code, e.errdata.getDetail().error, e);
+        else this.internalError(61052, e);
+        if (this.state === "idle" || this.state === "connecting" || this.state === "open") this.setState("closing", "closing");
+        this.setState("closed", "close");
+        return false;
+      })
+      .then((success) => {
+        if (success) this.connectMain(client_id, access_token, option);
+      });
   }
 
   /**
@@ -2331,13 +2383,12 @@ class Client extends EventTarget {
 
   /**
    * @private
-   * @param {MuteType} curMuteType
    * @param {MuteType} nextMuteType
    * @param {LocalLSTrack} localLSTrack
    */
-  async changeMuteMain(curMuteType, nextMuteType, localLSTrack) {
+  async changeMuteMain(nextMuteType, localLSTrack) {
     await this.withErrAsync(61040, async () => {
-      await this.changeMuteState(curMuteType, nextMuteType, localLSTrack);
+      await this.changeMuteState(nextMuteType, localLSTrack);
       if (this.isSfuRoom()) {
         const tags = this.metaToTags({ muteState: localLSTrack.getMuteState() }, "sdk");
         if (this.apiReady) {
@@ -2366,7 +2417,7 @@ class Client extends EventTarget {
 
     if (localLSTrack) {
       const curMuteType = localLSTrack.muteType;
-      if (curMuteType !== nextMuteType) await this.changeMuteMain(curMuteType, nextMuteType, localLSTrack);
+      if (curMuteType !== nextMuteType) await this.changeMuteMain(nextMuteType, localLSTrack);
     }
   }
 
@@ -2550,12 +2601,11 @@ class Client extends EventTarget {
 
   /**
    * @private
-   * @param {MuteType} curMuteType
    * @param {MuteType} nextMuteType
    * @param {MediaStreamTrack} curMediaStreamTrack
    * @returns {{nextMediaStreamTrack: MediaStreamTrack|null, trackEnabled: boolean}}
    */
-  nextTrackOnChangeMute(curMuteType, nextMuteType, curMediaStreamTrack) {
+  nextTrackOnChangeMute(nextMuteType, curMediaStreamTrack) {
     if (nextMuteType === "unmute") return { nextMediaStreamTrack: curMediaStreamTrack, trackEnabled: true };
     if (nextMuteType === "softmute") return { nextMediaStreamTrack: curMediaStreamTrack, trackEnabled: false };
     return { nextMediaStreamTrack: null, trackEnabled: false }; // hardmute
@@ -2563,16 +2613,15 @@ class Client extends EventTarget {
 
   /**
    * @private
-   * @param {MuteType} curMuteType
    * @param {MuteType} nextMuteType
    * @param {LocalLSTrack} localLSTrack
    * @returns {Promise&lt;void>}
    */
-  async changeMuteState(curMuteType, nextMuteType, localLSTrack) {
-    const { nextMediaStreamTrack, trackEnabled } = this.nextTrackOnChangeMute(curMuteType, nextMuteType, localLSTrack.mediaStreamTrack);
+  async changeMuteState(nextMuteType, localLSTrack) {
+    const { nextMediaStreamTrack, trackEnabled } = this.nextTrackOnChangeMute(nextMuteType, localLSTrack.mediaStreamTrack);
     localLSTrack.mediaStreamTrack.enabled = trackEnabled;
-    await localLSTrack.replaceSenderTrack(nextMediaStreamTrack);
     localLSTrack.muteType = nextMuteType;
+    await localLSTrack.replaceSenderTrack(nextMediaStreamTrack);
   }
 
   /**
@@ -2720,7 +2769,7 @@ class Client extends EventTarget {
   /**
    * @private
    * @param {Peer} peer
-   * @param {{ track: MediaStreamTrack, streams: MediaStream[] }} e
+   * @param {{ track: MediaStreamTrack, streams: MediaStream[], transceiver: RTCRtpTransceiver }} e
    */
   onTrackP2P(peer, e) {
     /** @type {AddRemoteTrackObj} */
@@ -2730,7 +2779,10 @@ class Client extends EventTarget {
       () => {
         const { track, streams } = e;
         const stream = streams[0];
-        obj = { connection_id: peer.connection_id, mediaStreamTrack: track, stream };
+        let mid = "";
+        if (e.transceiver.mid) mid = e.transceiver.mid;
+
+        obj = { connection_id: peer.connection_id, mediaStreamTrack: track, stream, mid };
 
         const conn = this.connections.get(peer.connection_id);
         if (conn) {
@@ -2772,6 +2824,7 @@ class Client extends EventTarget {
         const { track, streams } = e;
         const msid = e.streams[0].id;
         const mid = e.transceiver.mid;
+
         const rtm = peer.remote_track_metadata.find((t) => t.msid === msid &amp;&amp; t.mid === mid);
         if (!rtm) return;
 
@@ -2783,7 +2836,7 @@ class Client extends EventTarget {
         const metadata = this.tagsToMeta(rtm.tags);
         const mute = this.tagsToMute(rtm.tags);
 
-        obj = { connection_id, mediaStreamTrack: track, stream, meta: metadata, mute };
+        obj = { connection_id, mediaStreamTrack: track, stream, meta: metadata, mute, mid };
 
         const conn = this.connections.get(connection_id);
         if (conn) {
@@ -2960,7 +3013,8 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.9.2+20240229" },
+        sdk_info: { platform: "web", version: "1.10.0+20240612" },
+
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
       this.ws?.sendMessage(connectMessage);
@@ -3007,7 +3061,7 @@ class Client extends EventTarget {
     const { code, error } = this.getCloseErr(e.code);
     if (error === "paramerr") {
       const paramerr = this.getParamError(e.code);
-      if (paramerr) this.emitError(40000 + e.code, paramerr.err, e);
+      if (paramerr !== undefined) this.emitError(40000 + e.code, paramerr, e);
       else this.internalError(65000 + e.code, e); // This was once 61046
     } else if (error !== "") {
       const ignore53004 = code === 53004 &amp;&amp; (this.state === "closing" || this.state === "closed");
@@ -3038,17 +3092,19 @@ class Client extends EventTarget {
   onConnectSuccess(e) {
     let access_token_json = "";
     let connections_status = {};
+    let recording = false;
 
     this.withErr(
       61013,
       () => {
         if (this.state !== "connecting") return; // do nothing
-        const { ice_servers, room_session_id } = e;
+        const { ice_servers, room_session_id, room_status } = e;
         access_token_json = JSON.stringify(e.access_token_info);
         connections_status = e.connections_status;
         this.roomSpecType = e.access_token_info.room_spec.type;
         this.rtcConfiguration.iceServers = ice_servers;
         this.room_session_id = room_session_id;
+        recording = room_status?.recording_status?.in_recording;
       },
       () => {
         this.setState("open", "open", { access_token_json, connections_status });
@@ -3062,6 +3118,7 @@ class Client extends EventTarget {
           this.emit("addremoteconnection", obj);
           this.connections.set(connection_id, { state: "joined", join: now, sendrecv });
         });
+        if (recording) this.emit("updaterecording", { in_recording: true });
       },
     );
   }
@@ -3191,12 +3248,12 @@ class Client extends EventTarget {
       if (this.userIceTransportPolicy) this.rtcConfiguration.iceTransportPolicy = this.userIceTransportPolicy;
       const peer = await this.initP2PPeer(peer_connection_id);
 
-      this.initialReplaceMediaStreamTrack.forEach(async (v) => {
+      for (const v of this.initialReplaceMediaStreamTrack) {
         await this.replaceLSTrack(v.mediaStreamTrack, v.localLSTrack);
-      });
-      this.localLSTracks.forEach(async (localLSTrack) => {
-        await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
-      });
+      }
+      for (const localLSTrack of this.localLSTracks) {
+        await this.changeMuteState(localLSTrack.muteType, localLSTrack);
+      }
 
       const offer = await peer.getOffer();
       this.ws?.sendMessage({
@@ -3219,12 +3276,12 @@ class Client extends EventTarget {
    * @param {ConnectionID} peer_connection_id
    * @param {Peer} peer
    */
-  setEarlyCandidate(peer_connection_id, peer) {
+  async setEarlyCandidate(peer_connection_id, peer) {
     const candidates = this.earlyCandidates.get(peer_connection_id);
     if (candidates) {
-      candidates.forEach(async (candidate) => {
+      for (const candidate of candidates) {
         await peer.setIceCandidate(candidate);
-      });
+      }
       this.earlyCandidates.delete(peer_connection_id);
     }
   }
@@ -3244,12 +3301,12 @@ class Client extends EventTarget {
       if (this.userIceTransportPolicy) this.rtcConfiguration.iceTransportPolicy = this.userIceTransportPolicy;
       const peer = await this.initP2PPeer(peer_connection_id);
 
-      this.initialReplaceMediaStreamTrack.forEach(async (v) => {
+      for (const v of this.initialReplaceMediaStreamTrack) {
         await this.replaceLSTrack(v.mediaStreamTrack, v.localLSTrack);
-      });
-      this.localLSTracks.forEach(async (localLSTrack) => {
-        await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
-      });
+      }
+      for (const localLSTrack of this.localLSTracks) {
+        await this.changeMuteState(localLSTrack.muteType, localLSTrack);
+      }
 
       const answerSDP = await peer.createAnswerSDP(sdp);
       this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
@@ -3261,7 +3318,7 @@ class Client extends EventTarget {
       });
 
       // 先行到着していたcandidateがあればここで処理
-      this.setEarlyCandidate(peer_connection_id, peer);
+      await this.setEarlyCandidate(peer_connection_id, peer);
 
       this.apiReady = true;
 
@@ -3358,9 +3415,9 @@ class Client extends EventTarget {
         });
       }
 
-      this.initialReplaceMediaStreamTrack.forEach(async (v) => {
+      for (const v of this.initialReplaceMediaStreamTrack) {
         await this.replaceLSTrack(v.mediaStreamTrack, v.localLSTrack);
-      });
+      }
 
       const answerSDP = await this.sfupc.createAnswerSDP(sdp);
       this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
@@ -3372,10 +3429,10 @@ class Client extends EventTarget {
       this.apiReady = true;
 
       // このタイミングでないと設定できない
-      this.localLSTracks.forEach(async (localLSTrack) => {
-        await this.changeMuteState("unmute", localLSTrack.muteType, localLSTrack);
+      for (const localLSTrack of this.localLSTracks) {
+        await this.changeMuteState(localLSTrack.muteType, localLSTrack);
         if (localLSTrack.mediaStreamTrack.kind === "video") this.sendUpdateSendingVideoOption({ video: { mute_type: localLSTrack.getMuteType() } });
-      });
+      }
       for (const localLSTrack of this.localLSTracks) {
         if (this.initialFramerate) await localLSTrack.changeFramerate(this.initialFramerate);
       }
@@ -3502,6 +3559,24 @@ class Client extends EventTarget {
 
   /**
    * @private
+   * @param {NotifySFURecordingUpdateMessage} e
+   */
+  onNotifySFURecordingUpdate(e) {
+    let recording = false;
+    this.withErr(
+      61053,
+      () => {
+        const { recording_status } = e;
+        recording = recording_status?.in_recording;
+      },
+      () => {
+        this.emit("updaterecording", { in_recording: recording });
+      },
+    );
+  }
+
+  /**
+   * @private
    * @param {PingMessage} e
    */
   onPing(e) {
@@ -3528,8 +3603,8 @@ class Client extends EventTarget {
       return;
     }
     const sigerr = this.getSignalingError(error_code);
-    if (sigerr) {
-      if (sigerr.err !== "") this.emitError(45000 + error_code, sigerr.err, e);
+    if (sigerr !== undefined) {
+      if (sigerr !== "") this.emitError(45000 + error_code, sigerr, e);
       else this.putLog("debug", `emit ignore: ${error_code} `);
     } else this.internalError(61045, e);
   }
@@ -3588,186 +3663,19 @@ class Client extends EventTarget {
   /**
    * @private
    * @param {number} code
-   * @returns {{err: string}|undefined}
+   * @returns {string|undefined}
    */
   getParamError(code) {
-    const errmap = new Map([
-      //  [3200, {err: "client_id が入力にない"}], // 引数のため発生しない
-      [3201, { err: "InvalidClientID" }], // "client_id が Server に存在しない
-      //  [3202, {err: "access_token がない"}], // 引数のため発生しない
-      //  [3203, {err: "tags が配列でない"}], /
-      [3204, { err: "TooManyMeta" }], // tags 内に app_front の tag の数が規定数以上
-      //  [3205, {err: "tags 内に sdk の tag の数が規定数以上"}],
-      //  [3206, { err: "DuplicateMetaKey" }], // tags 内に同じ source と name の組の tag が存在"}],
-      //  [3207, { err: "InvalidMetaType" }], // tags 要素(以下 tag)がオブジェクトでない"}],
-      //  [3208, { err: "NotFoundMetaName" }], // tag に name がない"}],
-      [3209, { err: "InvalidMetaName" }], //tag の name 形式違反"}],
-      //  [3210, {err: "tag に source がない"}],
-      //  [3211, {err: "tag の source 形式違反"}],
-      //  [3212, {err: "tag に value がない"}],
-      [3213, { err: "TooLongMetaValue" }], // tag の value を JSON にした際の長さが規定以上"}],
-      //  [3214, {err: "tag の use_notification 形式違反"}],
-      //  [3215, {err: "tag の use_analysis 形式違反"}],
-      //  [3216, {err: "sdk_info 形式違反"}],
-      //  [3217, {err: "sdk_info.platform 形式違反"}],
-      //  [3218, {err: "sdk_info.version 形式違反"}],
-      //  [3219, {err: "sdk_info の platform と version の組み合わせがobsoleteになっている"}],
-      //  [3220, {err: "options 形式違反"}],
-      //  [3221, {err: "options.sending 形式違反"}],
-      //  [3222, {err: "options.sending.video 形式違反"}],
-      [3223, { err: "InvalidVideoCodecOnConnect" }], // options.sending.video.codec 形式違反"}],
-      [3224, { err: "InvalidVideoPriorityOnConnect" }], // options.sending.video.priority 形式違反
-      [3225, { err: "InvalidVideoMaxBitrateKbpsOnConnect" }], // options.sending.video.max_bitrate_kbps 形式違反
-      //  [3226, {err: "options.receiving 形式違反"}],
-      //  [3227, {err: "options.receiving.enabled 形式違反"}],
-      //  [3228, {err: "options.connecting 形式違反"}],
-      [3229, { err: "InvalidConnectingTurnProtocols" }], // options.connecting.turn_protocols 形式違反
-      //  [3230, { err: ""}], // options.sending.video.mute_type 形式違反
-      //  [3231, { err: "" }], // options.sending.enabled 形式違反
-      [3232, { err: "InvalidSendingReceivingEnabled" }], // options.sending.enabled と options.receiving.enabled の両方を false に指定した
-      [3233, { err: "TooManySendingClients" }], // sending.enabled を設定された Client が規定数以上
-      //  [3399, {err: "その他の connect 形式違反"}],
-      [3400, { err: "InvalidAccessTokenNotJWT" }], //JWT でない"}],
-      [3401, { err: "InvalidAccessTokenBadAlg" }], //alg が HS256 でない"}],
-      [3402, { err: "InvalidAccessTokenBadSignature" }], //署名が有効でない"}],
-      [3403, { err: "InvalidAccessTokenNoNbf" }], //nbf がない"}],
-      [3404, { err: "InvalidAccessTokenBadNbf" }], //nbf 形式違反"}],
-      [3405, { err: "InvalidAccessTokenBadNbfTime" }], //nbf 時刻違反 "}],
-      [3406, { err: "InvalidAccessTokenNoExp" }], //exp がない"}],
-      [3407, { err: "InvalidAccessTokenBadExp" }], //exp 形式違反"}],
-      [3408, { err: "InvalidAccessTokenBatExpTime" }], //exp 時刻違反"}],
-      [3409, { err: "InvalidAccessTokenNoConnectionID" }], //connection_id がない"}],
-      [3410, { err: "InvalidAccessTokenBadConnectionID" }], //connection_id 形式違反"}],
-      [3411, { err: "InvalidAccessTokenNoRoomID" }], //room_id がない"}],
-      [3412, { err: "InvalidAccessTokenBadRoomID" }], //room_id 形式違反"}],
-      [3413, { err: "InvalidAccessTokenBadVersion" }], //version 形式違反"}],
-      //  [3414, { err: "InvalidAccessTokenBadMeta" }], //meta がオブジェクトでない"}],
-      //  [3415, { err: "InvalidAccessTokenTooManyMeta" }], //meta の要素数が規定数以上"}],
-      //  [3416, { err: "InvalidAccessTokenBadMetaKey" }], //meta に形式違反のキーが存在"}],
-      //  [3417, { err: "InvalidAccessTokenBadMetaValue" }], //meta に形式違反のバリューが存在"}],
-      [3418, { err: "InvalidAccessTokenNoRoomSpec" }], //room_spec がない"}],
-      [3419, { err: "InvalidAccessTokenBadRoomSpec" }], //room_spec 形式違反"}],
-      [3420, { err: "InvalidAccessTokenNoRoomSpecType" }], //room_spec.type がない"}],
-      [3421, { err: "InvalidAccessTokenBadRoomSpecType" }], //room_spec.type 形式違反"}],
-      [3422, { err: "InvalidAccessTokenBadRoomSpecMaxConnections" }], //room_spec.max_connections 形式違反"}],
-      [3423, { err: "InvalidAccessTokenBadRoomSpecClassificationLabel" }], //room_spec.classification_label 形式違反"}],
-      [3424, { err: "InvalidAccessTokenBadRoomSpecMediaControl" }], //room_spec.media_control 形式違反"}],
-      [3425, { err: "InvalidAccessTokenBadRoomSpecMediaControlBitrateReservationMbps" }], //room_spec.media_control.bitrate_reservation_mbps 形式違反"}],
-      [3426, { err: "InvalidAccessTokenExceedTimeLimitation" }], //exp - nbf &lt;= 3600 に違反
-      [3599, { err: "InvalidAccessToken" }], //その他のAccessToken形式違反"}],
-      [3600, { err: "RoomSpecMissMatchOnConnect" }], // room_spec が room_instance 作成時の room_spec と一致しない"}],
-      //  [3601, {err: "ConnectionLimitExceeded"}], // max_connection 数超過"}],
-      // [3602, { err: "DuplicateConnectionIDOnConnect" }], // 欠番
-      [3603, { err: "SameConnectionIDJoined" }], // room に同一 connection_id の接続が行われたため切断された
-    ]);
-    return errmap.get(code);
+    return this.parameterErrorTable[code.toString()];
   }
 
   /**
    * @private
    * @param {number} code
-   * @returns {{err: string}|undefined}
+   * @returns {string|undefined}
    */
   getSignalingError(code) {
-    const errmap = new Map([
-      //[0, { err: ""}], // Server がサポートしていない、または State で許可されていない message_type のメッセージを送信した
-      [1, { err: "" }], // [InternalErrorとせずIgnore] P2PRoom で、指定された peer_connection_id が存在しない
-      //[100, { err: ""}], // tags が配列でない
-      //[101, { err: ""}], // tags 内に同じ source と name の組の tag が存在
-      //[102, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
-      //[103, { err: ""}], // tag に name がない
-      [104, { err: "InvalidMetaNameOnUpdateConnection" }], // tag の name 形式違反
-      //[105, { err: ""}], // tag に source がない
-      //[106, { err: ""}], // tag の source 形式違反
-      //[107, { err: ""}], // tag に value がない
-      [108, { err: "TooLongMetaNameOnUpdateConnection" }], // tag の value を JSON にした際の長さが規定以上
-      [109, { err: "NotFoundMetaOnUpdateConnection" }], // tag に対応する name と source が一致する LocalTag が存在していない
-      //[199, { err: ""}], // 上記以外のエラー
-      //[200, { err: ""}], // sdpがない
-      //[201, { err: ""}], // sdp形式違反
-      //[202, { err: ""}], // local_track_metadataが配列ではない
-      //[203, { err: ""}], // local_track_metadata要素(以下ltm)がオブジェクトでない
-      //[204, { err: ""}], // ltmにtrack_idがない
-      //[205, { err: ""}], // ltmのtrack_id形式違反
-      //[206, { err: ""}], // tags が配列でない
-      //[207, { err: "TooManyMetaOnConnect" }], // tags 内に app_front の tag の数が規定数以上
-      //[208, { err: ""}], // tags 内に sdk の tag の数が規定数以上
-      //[209, { err: "DuplicateMetaOnConnect" }], // tags 内に同じ source と name の組の tag が存在
-      //[210, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
-      //[211, { err: ""}], // tag に name がない
-      //[212, { err: ""}], // tag の name 形式違反
-      //[213, { err: ""}], // tag に source がない
-      //[214, { err: ""}], // tag の source 形式違反
-      //[215, { err: ""}], // tag に value がない
-      //[216, { err: "TooLongMetaValueOnConnect" }], // tag の value を JSON にした際の長さが規定以上
-      //[217, { err: ""}], // tag の use_notification 形式違反
-      //[218, { err: ""}], // tag の use_analysis 形式違反
-      //[299, { err: ""}], // 上記以外のエラー
-      //[300, { err: ""}], // candidateがない
-      //[301, { err: ""}], // candidate形式違反
-      //[399, { err: ""}], // 上記以外のエラー
-      //[400, { err: ""}], // sdpがない
-      //[401, { err: ""}], // sdp形式違反
-      //[499, { err: ""}], // 上記以外のエラー
-      //[500, { err: ""}], // track_idがない
-      //[501, { err: ""}], // track_id形式違反
-      //[502, { err: ""}], // track_idがLocalTrackに割り振られたtrack_idではない
-      //[503, { err: ""}], // tags が配列でない
-      //[504, { err: "DuplicateMetaOnUpdateTrackMeta" }], // tags 内に同じ source と name の組の tag が存在
-      //[505, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
-      //[506, { err: ""}], // tag に name がない
-      //[507, { err: ""}], // tag の name 形式違反
-      //[508, { err: ""}], // tag に source がない
-      //[509, { err: ""}], // tag の source 形式違反
-      //[510, { err: ""}], // tag に value がない
-      [511, { err: "TooLongMetaValueOnUpdateTrackMeta" }], // tag の value を JSON にした際の長さが規定文字以上
-      [512, { err: "NotFoundMetaOnUpdateTrackMeta" }], // tag に対応する name と source が一致する LocalTag が存在していない
-      //[599, { err: ""}], // 上記以外のエラー
-      //[600, { err: ""}], // local_track_metadata が配列ではない
-      //[601, { err: ""}], // local_track_metadata 要素(以下 ltm)がオブジェクトでない
-      //[602, { err: ""}], // ltm に track_id がない
-      //[603, { err: ""}], // ltm の track_id 形式違反
-      //[604, { err: ""}], // tags が配列でない
-      [605, { err: "TooManyMetaOnConnect" }], // tags 内に app_front の tag の数が規定数以上
-      //[606, { err: ""}], // tags 内に sdk の tag の数が規定数以上
-      //[607, { err: ""}], // tags 内に同じ source と name の組の tag が存在
-      //[608, { err: ""}], // tags 要素(以下 tag)がオブジェクトでない
-      //[609, { err: ""}], // tag に name がない
-      //[610, { err: ""}], // tag の name 形式違反
-      //[611, { err: ""}], // tag に source がない
-      //[612, { err: ""}], // tag の source 形式違反
-      //[613, { err: ""}], // tag に value がない
-      [614, { err: "TooLongMetaValueOnConnect" }], // tag の value を JSON にした際の長さが規定以上
-      //[615, { err: ""}], // tag の use_notification 形式違反
-      //[616, { err: ""}], // tag の use_analysis 形式違反
-      //[617, { err: ""}], // pre_answerメッセージが複数回クライアントから送信された
-      //[699, { err: ""}], // 上記以外のエラー
-      //[700, { err: ""}], // track_id がない
-      //[701, { err: ""}], // track_id 形式違反
-      //[702, { err: ""}], // enabled の形式違反
-      [703, { err: "" }], // [InternalErrorとせずIgnore] track_id が LocalTrack に割り振られた track_id ではない
-      //[704, { err: ""}], // 送信専用クライアントが受信オプションを変更しようとした
-      //[705, { err: ""}], // update_options.sending 形式違反
-      //[706, { err: ""}], // update_options.sending.video 形式違反
-      //[707, { err: ""}], // update_options.sending.video.max_bitrate_kbps 形式違反
-      [708, { err: "OutOfRangeMaxBitrateKbpsOnChangeVideoSendBitrate" }], // update_options.sending.video.max_bitrate_kbps が設定可能範囲を超えている
-      //[800, { err: ""}], // peer_connection_idがない
-      //[801, { err: ""}], // sdpがない
-      //[802, { err: ""}], // sdp形式違反
-      //[803, { err: ""}], // p2psession_idがサーバが保持するp2psession_idと一致しない
-      //[899, { err: ""}], // 上記以外のエラー
-      //[900, { err: ""}], // peer_connection_idがない
-      //[901, { err: ""}], // sdpがない
-      //[902, { err: ""}], // sdp形式違反
-      //[903, { err: ""}], // p2psession_idがサーバが保持するp2psession_idと一致しない
-      //[999, { err: ""}], // 上記以外のエラー
-      //[1000, { err: ""}], // peer_connection_idがない
-      //[1001, { err: ""}], // candidateがない
-      //[1002, { err: ""}], // candidate形式違反
-      //[1003, { err: ""}], // p2psession_idがサーバが保持するp2psession_idと一致しない
-      //[1099, { err: ""}], // 上記以外のエラー
-    ]);
-    return errmap.get(code);
+    return this.signalingErrorTable[code.toString()];
   }
 
   /**
@@ -3801,13 +3709,13 @@ export const testables = {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-ricoh-ls-sdk.html">ricoh-ls-sdk</a></li></ul><h3>Classes</h3><ul><li><a href="module-ricoh-ls-sdk-Client.html">Client</a></li><li><a href="module-ricoh-ls-sdk-ErrorData.html">ErrorData</a></li><li><a href="module-ricoh-ls-sdk-ET.html">ET</a></li><li><a href="module-ricoh-ls-sdk-LocalLSTrack.html">LocalLSTrack</a></li><li><a href="module-ricoh-ls-sdk-LSTrack.html">LSTrack</a></li><li><a href="module-ricoh-ls-sdk-SDKError.html">SDKError</a></li><li><a href="module-ricoh-ls-sdk-SDKErrorEvent.html">SDKErrorEvent</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-ricoh-ls-sdk.html">ricoh-ls-sdk</a></li></ul><h3>Classes</h3><ul><li><a href="module-ricoh-ls-sdk-Client.html">Client</a></li><li><a href="module-ricoh-ls-sdk-ErrorData.html">ErrorData</a></li><li><a href="module-ricoh-ls-sdk-LSTrack.html">LSTrack</a></li><li><a href="module-ricoh-ls-sdk-LocalLSTrack.html">LocalLSTrack</a></li><li><a href="module-ricoh-ls-sdk-SDKError.html">SDKError</a></li><li><a href="module-ricoh-ls-sdk-SDKErrorEvent.html">SDKErrorEvent</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.6</a> on Thu Feb 29 2024 07:27:17 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.2</a> on Wed Dec 25 2024 02:01:43 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>

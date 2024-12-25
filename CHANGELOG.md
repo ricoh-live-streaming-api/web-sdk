@@ -222,3 +222,16 @@
 - SDK 修正
   - 正常終了時に 53004 ConnectionClosedByServer が発生してしまうことがある問題を修正しました
 
+## v1.10.0
+- API 変更
+  - Room のクラウド録画状態を通知する [updaterecording イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
+  - LocalTrack の mid を取得するメソッド [Client#getLocalTrackMid()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getlocaltrackmid)を追加しました
+    - [mid は WebRTC における メディアストリームの識別子](https://w3c.github.io/webrtc-pc/#dfn-mid)です
+    - [getStats()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
+  - [addremotetrack イベントに mid の属性](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
+    - こちらも [getStats()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
+  - SDK 内部シーケンスにおいてシグナリングサーバへの WebSocket リクエストの前段にシグナリングサーバへの HTTP リクエストする処理を処理の柔軟化のため追加しました。この HTTP リクエストが失敗した場合の[NetworkError](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) 54003 PreConnectError を追加しました
+- SDK 修正
+  - connect 直後に changeMute した場合に正常に処理されないことがある不具合を修正しました
+- サンプルアプリ修正
+  - デフォルトの RoomType を sfu に変更しました

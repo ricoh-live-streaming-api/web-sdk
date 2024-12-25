@@ -27,7 +27,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    * Client の Event Type
    *
    * @public
-   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" | "updatemute" | "changestability" | "mediaopen" | "changemediastability" | "log"} EventType
+   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" | "updaterecording" | "updatemute" | "changestability" | "mediaopen" | "changemediastability" | "log"} EventType
    */
   type EventType =
     | "connecting"
@@ -42,6 +42,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     | "removeremoteconnection"
     | "updateremoteconnection"
     | "updateconnectionsstatus"
+    | "updaterecording"
     | "updatemute"
     | "mediaopen"
     | "changestability"
@@ -147,35 +148,6 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     error: string;
   }
 
-  /**
-   * Safari が EventTarget を継承できないので Polyfill
-   * Client が動く程度の範囲で実装
-   *
-   * @public
-   * @class ET
-   */
-  class ET {
-    /** @type Map<String, EventListenerWithOptions[]>
-     */
-    listeners: Map<String, EventListenerWithOptions[]>;
-    /**
-     * @param {String} type
-     * @param {EventListener} listener
-     * @param {AddEventListenerOptions} options
-     */
-    addEventListener(type: string, listener: EventListener, options?: AddEventListenerOptions): void;
-    /**
-     * @param {Event} event
-     */
-    dispatchEvent(event: Event): void;
-    /**
-     *
-     * @param {String} type
-     * @param {EventListener} func
-     * @param {EventListenerOptions} options
-     */
-    removeEventListener(type: string, func: EventListener, options?: EventListenerOptions): void;
-  }
   /** @typedef {{listener: EventListener, options: AddEventListenerOptions}} EventListenerWithOptions
    */
   type EventListenerWithOptions = any;
@@ -206,6 +178,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     mediaStreamTrack: MediaStreamTrack;
     stream: MediaStream;
     mute: MuteType;
+    mid?: string;
   }
   interface LSUpdateRemoteTrackEvent extends Event {
     connection_id: string;
@@ -234,6 +207,9 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
   interface LSUpdateConnectionsStatusEvent extends Event {
     connections_status: ConnectionsStatus;
   }
+  interface LSUpdateRecordingEvent extends Event {
+    in_recording: boolean;
+  }
   interface LSMediaOpenEvent extends Event {}
   interface LSLogEvent extends Event {
     msg: string;
@@ -258,6 +234,8 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     addlocaltrack: LSAddLocalTrackEvent;
     updatemute: LSUpdateMuteEvent;
     updateconnectionsstatus: LSUpdateConnectionsStatusEvent;
+    updaterecording: LSUpdateRecordingEvent;
+
     mediaopen: LSMediaOpenEvent;
     log: LSLogEvent;
   }
@@ -268,9 +246,9 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    *
    * @public
    * @class Client
-   * @extends ET
+   * @extends EventTarget
    */
-  class Client extends ET {
+  class Client extends EventTarget {
     /**
      * イベントハンドラを追加する(removeできない)
      *
@@ -304,6 +282,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @param {JwtAccessToken} access_token
      * @param {ConnectOption} option
      */
+
     public connect(client_id: ClientID, access_token: JwtAccessToken, option: ConnectOption): void;
     /**
      * 保持する PeerConnection と WebSocket を開放し
@@ -400,6 +379,16 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @public
      */
     public getTrackReport(): string;
+
+    /**
+     * LSTrack(local track)に対するmidを取得する
+     *
+     * @public
+     * @param {LSTrack} lsTrack
+     * @param {ConnectionID} connection_id*
+     *
+     */
+    public getLocalTrackMid(lsTrack: LSTrack, connection_id: ConnectionID): string;
   }
   /**
    * MediaStreamTrack の wrapper
@@ -416,6 +405,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @param {LSTrackOption} option
      */
     constructor(mediaStreamTrack: MediaStreamTrack, stream: MediaStream, option: LSTrackOption);
+
     /** @type MediaStreamTrack
      */
     mediaStreamTrack: MediaStreamTrack;
@@ -439,7 +429,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @public
      * @returns {String}
      */
-    public toReportString();
+    public toReportString(): string;
   }
 
   /**
@@ -460,6 +450,6 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      * @public
      * @returns {String}
      */
-    public toReportString();
+    public toReportString(): string;
   }
 }
