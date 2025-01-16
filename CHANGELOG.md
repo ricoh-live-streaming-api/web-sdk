@@ -149,7 +149,7 @@
 ## v1.4.0
 - API変更
     - 送信映像フレームレートを送信中に変更できる
-    - [Client#changeVideoSendFramerate(maxFramerate: number)](https://api.livestreaming.ricoh/document/ricoh-live-streaming-client-sdk-api-%E5%A4%96%E9%83%A8%E4%BB%95%E6%A7%98/#changeVideoSendFramerate) を追加
+    - [Client#changeVideoSendFramerate(maxFramerate: number)](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#changevideosendframerate) を追加
     - (2022/06/29より本番環境で利用可能になりました)ConnectOptionのsending.enabledでクライアントの送信機能を無効にできるようにした。同一Room中に大量に送信機能が有効なクライアントが存在する場合、クライアントに大きな処理負荷や遅延が発生してしまうが、このオプションで低減することができる
 
 - SDK修正
@@ -176,7 +176,7 @@
 
 ## v1.6.0
 - SDK 修正
-    - [NetworkError の追加と廃止](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)を行いました
+    - [NetworkError の追加と廃止](https://livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)を行いました
         - 追加: Room 管理 API (3 月までにリリース予定) でアプリケーションから切断された場合のエラーコード 53002 ConnectionClosedByApplication
         - 追加: Room の最大持続時間(24 時間)を越えて切断された場合のエラーコード 53003 MaxRoomPeriodExceeded
         - 廃止: 54000 OnTrackTimeout。同等の内容はログに出力されるのみになります
@@ -188,7 +188,7 @@
 
 ## v1.7.0
 - API 変更
-  - Client の open から API コール時点 までに発生した MediaStreamTrack の追加削除ログが取得するメソッド[Client#getTrackReport()](https://api.livestreaming.ricoh/document/ricoh-live-streaming-client-sdk-api-%E5%A4%96%E9%83%A8%E4%BB%95%E6%A7%98/#gettrackreport)を追加しました
+  - Client の open から API コール時点 までに発生した MediaStreamTrack の追加削除ログが取得するメソッド[Client#getTrackReport()](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#gettrackreport)を追加しました
 - SDK 修正
   - removeremoteconnection イベントのコールバックの引数にイベントと紐づく Connection と紐づかない MediaStreamTrack が含まれていた問題を修正しました
 
@@ -198,16 +198,16 @@
 
 ## v1.8.0
 - API 変更
-  - [log イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88)を追加しました。getTailReport や getHeadReport で取得できるログと同等の情報を、逐次的なイベントとしてオブジェクトで取得できるようになります。
+  - [log イベント](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました。getTailReport や getHeadReport で取得できるログと同等の情報を、逐次的なイベントとしてオブジェクトで取得できるようになります。
 
 ## v1.9.0
 - API 変更
-  - [NetworkError](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)に SFU が WebRTC 接続を切断判定した場合のエラー 53004 ConnectionClosedByServer を追加しました
-  - (SFURoom のみ) SFU とのメディア接続が確立した際に発行する[イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)である mediaopen を追加しました。[getStats](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) が実行可能か判断するトリガーや、以降 [53719 ConnectionCreateTimeout](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) が発生しないことの確認などに使用できます
+  - [NetworkError](https://livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror)に SFU が WebRTC 接続を切断判定した場合のエラー 53004 ConnectionClosedByServer を追加しました
+  - (SFURoom のみ) SFU とのメディア接続が確立した際に発行する[イベント](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)である mediaopen を追加しました。[getStats](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) が実行可能か判断するトリガーや、以降 [53719 ConnectionCreateTimeout](https://livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) が発生しないことの確認などに使用できます
   - ある connection から見て自分が送信している映像を受信している対向 connection の有無をイベントで通知するようになりました
     - 対向の入室や受信モードなどに応じて有無は変化します
-    - [updateconnectionsstatus イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)の video.receiver_existence で判断できるようになります
-  - [connect の options](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#connect) の iceServersProtocol に"tcp_tls"が指定できるようになりました。TURN の TCP か TLS が自動で選択されるようになります
+    - [updateconnectionsstatus イベント](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)の video.receiver_existence で判断できるようになります
+  - [connect の options](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#connect) の iceServersProtocol に"tcp_tls"が指定できるようになりました。TURN の TCP か TLS が自動で選択されるようになります
 - SDK 修正
   - **破壊的変更予定** changestability イベントを changemediastability イベントに変更しました (mediaopen イベントと合わせるため)。現時点では changestability イベントも引き続き使用できますが、今後廃止予定ですので移行をお願いします
   - ログの ICE (WebRTC の接続試行) 関連の情報を強化しました
@@ -224,13 +224,13 @@
 
 ## v1.10.0
 - API 変更
-  - Room のクラウド録画状態を通知する [updaterecording イベント](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
-  - LocalTrack の mid を取得するメソッド [Client#getLocalTrackMid()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getlocaltrackmid)を追加しました
+  - Room のクラウド録画状態を通知する [updaterecording イベント](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
+  - LocalTrack の mid を取得するメソッド [Client#getLocalTrackMid()](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#getlocaltrackmid)を追加しました
     - [mid は WebRTC における メディアストリームの識別子](https://w3c.github.io/webrtc-pc/#dfn-mid)です
-    - [getStats()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
-  - [addremotetrack イベントに mid の属性](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
-    - こちらも [getStats()](https://api.livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
-  - SDK 内部シーケンスにおいてシグナリングサーバへの WebSocket リクエストの前段にシグナリングサーバへの HTTP リクエストする処理を処理の柔軟化のため追加しました。この HTTP リクエストが失敗した場合の[NetworkError](https://api.livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) 54003 PreConnectError を追加しました
+    - [getStats()](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
+  - [addremotetrack イベントに mid の属性](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#イベント)を追加しました
+    - こちらも [getStats()](https://livestreaming.ricoh/docs/clientsdk-api-external-specification/#getstats) の返却値のトラック別の仕分け等に活用できます
+  - SDK 内部シーケンスにおいてシグナリングサーバへの WebSocket リクエストの前段にシグナリングサーバへの HTTP リクエストする処理を処理の柔軟化のため追加しました。この HTTP リクエストが失敗した場合の[NetworkError](https://livestreaming.ricoh/docs/clientsdk-error-specification/#networkerror) 54003 PreConnectError を追加しました
 - SDK 修正
   - connect 直後に changeMute した場合に正常に処理されないことがある不具合を修正しました
 - サンプルアプリ修正
