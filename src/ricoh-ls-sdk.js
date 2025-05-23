@@ -1490,8 +1490,9 @@ class SDKErrorEvent extends CustomEvent {
   /**
    * @public
    * @param {ErrorData} errdata
+   * @param {boolean} withDisconnection
    */
-  constructor(errdata) {
+  constructor(errdata, withDisconnection) {
     super("error", { detail: errdata.getDetail() });
 
     /**
@@ -1499,6 +1500,12 @@ class SDKErrorEvent extends CustomEvent {
      * @type {ErrorData}
      */
     this.errdata = errdata;
+
+    /**
+     * @public
+     * @type {boolean}
+     */
+    this.withDisconnection = withDisconnection;
   }
 
   /**
@@ -1765,6 +1772,12 @@ class Client extends EventTarget {
      * @type {Map<string, string>}
      */
     this.signalingErrorTable = new Map();
+
+    /**
+     * @private
+     * @type {boolean}
+     */
+    this.previousDisconnection = false;
   }
 
   /**
@@ -1795,11 +1808,26 @@ class Client extends EventTarget {
   /**
    * @private
    * @param {number} code
+   * @returns {boolean}
+   */
+  isWithDisconnection(code) {
+    // 切断を伴うエラーコード( 40000 ～ 44999, 50000～ )の初回取得時は true、それ以外は false
+    const currentDisconnection = (code >= 40000 && code < 45000) || code >= 50000;
+    if (currentDisconnection && !this.previousDisconnection) {
+      this.previousDisconnection = true;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * @private
+   * @param {number} code
    * @param {string} err
    * @param {any} detail
    */
   emitError(code, err, detail) {
-    this.dispatchEvent(new SDKErrorEvent(new ErrorData(code, err, detail)));
+    this.dispatchEvent(new SDKErrorEvent(new ErrorData(code, err, detail), this.isWithDisconnection(code)));
   }
 
   /**
@@ -2135,6 +2163,7 @@ class Client extends EventTarget {
     this.putLog("debug", `UA: ${window.navigator.userAgent}`);
 
     this.setState("connecting", "connecting");
+    this.previousDisconnection = false;
 
     fetch(CLIENT_JSON_URL)
       .catch((e) => {
@@ -2985,7 +3014,7 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.10.0+20240612" },
+        sdk_info: { platform: "web", version: "1.11.0+20250325" },
 
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
@@ -3666,6 +3695,7 @@ class Client extends EventTarget {
 export { LSTrack };
 export { Client };
 export { SDKError };
+export { SDKErrorEvent };
 
 export const testables = {
   ErrorData: ErrorData,

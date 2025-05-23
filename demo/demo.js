@@ -284,7 +284,6 @@ $("#amute").addEventListener("change", async (e) => {
   const mute = $("input:checked[name=amute]").value;
   if ($("#start").disabled) {
     const lsTrack = lsTracks.filter((lsTrack) => lsTrack.mediaStreamTrack.kind === "audio")[0];
-    lsTrack.mediaStreamTrack = null;
     await client.changeMute(lsTrack, mute);
   }
 });

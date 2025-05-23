@@ -445,6 +445,10 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
      */
     public detail: ErrorDetail;
     /**
+     * エラーが切断を伴うかどうか　true: 切断あり, false: 切断なし
+     */
+    public withDisconnection: boolean;
+    /**
      * 解析用文字列を取得する
      *
      * @public

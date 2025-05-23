@@ -235,3 +235,7 @@
   - connect 直後に changeMute した場合に正常に処理されないことがある不具合を修正しました
 - サンプルアプリ修正
   - デフォルトの RoomType を sfu に変更しました
+
+## v1.11.0
+* API変更
+  * onError イベントに切断を伴うエラーかどうかを判定する withDisconnection パラメータを追加しました
