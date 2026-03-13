@@ -27,7 +27,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
    * Client の Event Type
    *
    * @public
-   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" | "updaterecording" | "updatemute" | "changestability" | "mediaopen" | "changemediastability" | "log"} EventType
+   * @typedef {"connecting" | "open" | "closing" | "close" | "error" | "addlocaltrack" | "addremotetrack" | "updateremotetrack" | "addremoteconnection" | "removeremoteconnection" | "updateremoteconnection" | "updateconnectionsstatus" | "updaterecording" | "updatemute" | "changestability" | "mediaopen" | "changemediastability" | "receiveUnsupportedCodec" | "log"} EventType
    */
   type EventType =
     | "connecting"
@@ -47,6 +47,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     | "mediaopen"
     | "changestability"
     | "changemediastability"
+    | "receiveUnsupportedCodec"
     | "log";
 
   type VideoCodecType = "h264" | "vp8" | "vp9" | "h265" | "av1";
@@ -124,6 +125,11 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
 
   interface ConnectionsStatus {
     video: ConnectionsVideoStatus;
+  }
+
+  interface UnsupportedCodecConnection {
+    connection_id: string;
+    codec: string;
   }
 
   /**
@@ -217,6 +223,10 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     subcategory: string;
     date: Date;
   }
+  interface LSReceiveUnsupportedCodecEvent extends Event {
+    unsupportedCodecConnections: Array<UnsupportedCodecConnection>;
+    mySupportedCodecs: string[];
+  }
 
   interface LSClientEventMap {
     connecting: LSConnectingEvent;
@@ -237,6 +247,7 @@ declare module "@ricoh-live-streaming-api/ricoh-ls-sdk" {
     updaterecording: LSUpdateRecordingEvent;
 
     mediaopen: LSMediaOpenEvent;
+    receiveUnsupportedCodec: LSReceiveUnsupportedCodecEvent;
     log: LSLogEvent;
   }
 

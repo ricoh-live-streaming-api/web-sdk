@@ -1778,6 +1778,18 @@ class Client extends EventTarget {
      * @type {boolean}
      */
     this.previousDisconnection = false;
+
+    /**
+     * @private
+     * @type {Set<ConnectionID>}
+     */
+    this.rejectedCodecConnections = new Set();
+
+    /**
+     * @private
+     * @type {string[]|null}
+     */
+    this.mySupportedVideoCodecsCache = null;
   }
 
   /**
@@ -1837,11 +1849,15 @@ class Client extends EventTarget {
    * @param {boolean} disconnect
    */
   internalError(code, detail, disconnect = true) {
+    this.putLog("debug", `InternalError occurred: code=${code}, detail=${detail}`);
     const ignoreError = this.state === "closing" || this.state === "closed";
-    if (disconnect) this.disconnect();
+    if (disconnect) {
+      this.putLog("debug", `InternalError triggering disconnect: code=${code}, state=${this.state}`);
+      this.disconnect();
+    }
     if (!ignoreError) {
+      this.putLog("debug", `InternalError emitting error event: code=${code}, state=${this.state}, disconnect=${disconnect}`);
       const err = "InternalError" + code.toString();
-      this.putLog("debug", `InternalError: ${detail}`);
       this.emitError(code, err, detail);
     }
   }
@@ -2230,6 +2246,7 @@ class Client extends EventTarget {
           this.timerId = null;
         }
 
+        this.rejectedCodecConnections.clear();
         this.trackReport = "";
       },
       null,
@@ -2443,7 +2460,25 @@ class Client extends EventTarget {
     if (this.sendrecv === "sendonly") return { code: 45013, error: "InvalidReceivingOptionOnChangeMediaRequirements", rtm: null };
 
     const rtm = this.findRtm(connection_id);
-    if (rtm === undefined) return { code: 45012, error: "ConnectionNotFoundOnChangeMediaRequirements", rtm: null };
+    if (rtm === undefined) {
+      const allRtm = this.sfupc?.remote_track_metadata || [];
+      this.putLog(
+        "debug",
+        `ConnectionNotFoundOnChangeMediaRequirements: connection_id=${connection_id}. ` +
+          `Available remote_track_metadata (video only): ${JSON.stringify(
+            allRtm
+              .filter((t) => t.kind === "video")
+              .map((t) => ({
+                connection_id: t.connection_id,
+                track_id: t.track_id,
+                msid: t.msid,
+                mid: t.mid,
+                kind: t.kind,
+              })),
+          )}`,
+      );
+      return { code: 45012, error: "ConnectionNotFoundOnChangeMediaRequirements", rtm: null };
+    }
     return { code: 0, error: "", rtm };
   }
 
@@ -2827,7 +2862,24 @@ class Client extends EventTarget {
         const mid = e.transceiver.mid;
 
         const rtm = peer.remote_track_metadata.find((t) => t.msid === msid && t.mid === mid);
-        if (!rtm) return;
+        if (!rtm) {
+          this.putLog(
+            "debug",
+            `onTrackSFU: remote_track_metadata not found. ` +
+              `Search: msid=${msid}, mid=${mid}. ` +
+              `Available remote_track_metadata: ${JSON.stringify(
+                peer.remote_track_metadata.map((t) => ({
+                  connection_id: t.connection_id,
+                  track_id: t.track_id,
+                  msid: t.msid,
+                  mid: t.mid,
+                  kind: t.kind,
+                })),
+              )}`,
+          );
+          // ログのみ残し通知しない
+          return;
+        }
 
         const connection_id = rtm.connection_id;
         const stream = streams[0];
@@ -2848,7 +2900,11 @@ class Client extends EventTarget {
         this.trackReport += `[${new Date().toISOString()}]\tadd(${track.kind})\t${track.id}\tconnection_id: ${connection_id}\n`;
       },
       () => {
-        this.emit("addremotetrack", obj);
+        if (obj) {
+          this.emit("addremotetrack", obj);
+        } else {
+          this.putLog("debug", "onTrackSFU: obj is undefined, so not emitting addremotetrack");
+        }
       },
     );
   }
@@ -2926,6 +2982,7 @@ class Client extends EventTarget {
   onChangeStability(e) {
     const connection_id = e.connection_id === "" ? "sfu" : e.connection_id;
     if (e.stability === "iceconnecttimeout") {
+      this.putLog("debug", `ICE connection timeout: ${connection_id}`);
       this.emitError(54001, "IceConnectionTimeout", e);
     } else {
       this.emit("changestability", { connection_id, stability: e.stability });
@@ -3014,7 +3071,7 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.11.0+20250325" },
+        sdk_info: { platform: "web", version: "1.12.0+20260204" },
 
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
@@ -3080,6 +3137,8 @@ class Client extends EventTarget {
       this.peers.delete(k);
     });
     this.peers = new Map();
+
+    this.rejectedCodecConnections.clear();
 
     if (this.state === "idle" || this.state === "connecting" || this.state === "open") this.setState("closing", "closing");
 
@@ -3161,6 +3220,7 @@ class Client extends EventTarget {
       () => {
         const { connection } = e;
         const { connection_id, tags } = connection;
+        this.putLog("debug", `Received notify.connection.leave: ${connection_id}`);
         const meta = this.tagsToMeta(tags);
 
         if (this.sfupc) {
@@ -3190,6 +3250,9 @@ class Client extends EventTarget {
 
         const conn = this.connections.get(connection_id);
         if (conn) this.connections.delete(connection_id);
+
+        // receiveUnsupportedCodec の管理セットからも削除
+        this.rejectedCodecConnections.delete(connection_id);
       },
       () => {
         this.emit("removeremoteconnection", obj);
@@ -3311,6 +3374,10 @@ class Client extends EventTarget {
 
       const answerSDP = await peer.createAnswerSDP(sdp);
       this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+
+      // Answer SDP内で拒否されたコーデックを検出
+      this.detectAndEmitRejectedCodecs(answerSDP, sdp, [], peer_connection_id);
+
       const answer = await peer.setAnswerSDP(answerSDP);
       this.ws?.sendMessage({
         message_type: "p2p.answer",
@@ -3422,6 +3489,10 @@ class Client extends EventTarget {
 
       const answerSDP = await this.sfupc.createAnswerSDP(sdp);
       this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+
+      // Answer SDP内で拒否されたコーデックを検出
+      this.detectAndEmitRejectedCodecs(answerSDP, sdp, e.remote_track_metadata);
+
       const answer = await this.sfupc.setAnswerSDP(answerSDP);
       this.ws?.sendMessage({
         message_type: "sfu.answer",
@@ -3457,6 +3528,10 @@ class Client extends EventTarget {
         this.sfupc.setRemoteTrackMetadata(e.remote_track_metadata);
         const answerSDP = await this.sfupc.createAnswerSDP(sdp);
         this.putLog("debug", `answer: ${JSON.stringify(answerSDP)}`);
+
+        // Answer SDP内で拒否されたコーデックを検出
+        this.detectAndEmitRejectedCodecs(answerSDP, sdp, e.remote_track_metadata);
+
         const answer = await this.sfupc.setAnswerSDP(answerSDP);
         this.ws.sendMessage({
           message_type: "sfu.update_answer",
@@ -3522,7 +3597,12 @@ class Client extends EventTarget {
       () => {
         const { track_id, tags } = e;
         const rtm = this.sfupc?.remote_track_metadata.find((t) => t.track_id === track_id);
-        if (!rtm) return;
+        if (!rtm) {
+          // 仕様上、notify.sfu.track.updateに含まれる track_id を初期化するsfu.update_offerの到着前にこのメッセージが到着する可能性がある
+          // その場合、後続のsfu.update_offerにnotify.sfu.track.updateに対応した Tag の更新は反映されているためこのメッセージを破棄する
+          this.putLog("debug", `onNotifySFUTrackUpdate: Discarding update (before sfu.update_offer). track_id=${track_id}`);
+          return;
+        }
 
         if (!rtm.track) onTrackArrived = false;
 
@@ -3533,7 +3613,11 @@ class Client extends EventTarget {
         if (this.storeReservedUpdate(rtm.connection_id, muteState, meta, track_id)) return;
       },
       () => {
-        if (Object.keys(meta).length && onTrackArrived) this.emit("updateremotetrack", objUpdateRemoteTrack);
+        if (meta && Object.keys(meta).length && onTrackArrived) {
+          this.emit("updateremotetrack", objUpdateRemoteTrack);
+        } else {
+          this.putLog("debug", "onNotifySFUTrackUpdate: meta is undefined or empty, so not emitting updateremotetrack");
+        }
         if (muteState && onTrackArrived) this.emit("updatemute", objUpdateMute);
       },
     );
@@ -3645,6 +3729,7 @@ class Client extends EventTarget {
     let timeout = false;
     if (this.ws) timeout = 90 * 1000 < now - this.ws.lastReceived;
     if ((this.state === "open" || this.state === "connecting") && timeout) {
+      this.putLog("debug", `Signaling timeout detected: last_received=${this.ws ? now - this.ws.lastReceived : "unknown"}ms ago`);
       this.emitError(54002, "SignalingTimeout", {});
       this.disconnect();
       return;
@@ -3689,6 +3774,202 @@ class Client extends EventTarget {
     if (type === "state") this.stateTailHistory = this.logger.putLog("Client", "state", this.stateHeadHistory, this.stateTailHistory, msg);
     else if (type === "wsevent") this.wsEventTailHistory = this.logger.putLog("WebSocket", "event", this.wsEventHeadHistory, this.wsEventTailHistory, msg);
     else this.debugInfoTailHistory = this.logger.putLog("DebugInfo", "debugInfo", this.debugInfoHeadHistory, this.debugInfoTailHistory, msg);
+  }
+
+  /**
+   * SDPから特定のmidに対応するコーデックを取得
+   *
+   * @private
+   * @param {{sdp: string, mid: string}} params
+   * @returns {string|null}
+   */
+  getCodecForMid({ sdp, mid }) {
+    const lines = sdp.split(/\r?\n/).map((l) => l.trim());
+    let foundMid = false;
+    let payloadType = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      const midMatch = line.match(/^a=mid:(.+)$/);
+      if (midMatch && midMatch[1].trim() === mid) {
+        foundMid = true;
+        // mid に対応するペイロードタイプを取得する
+        // SDP仕様上、a=mid は必ず対応する m=video の後に記述されるため、逆方向に検索
+        for (let j = i - 1; j >= 0; j--) {
+          if (lines[j].startsWith("m=video")) {
+            const parts = lines[j].split(/\s+/);
+            if (parts.length < 4) {
+              // SDPフォーマットが期待と異なる場合
+              this.putLog("debug", `Failed to get payload type due to different SDP format.`);
+              // 接続自体には影響しないため、切断せずに処理を継続する
+              this.internalError(61055, "InvalidSDPFormatOnGetCodecForMid", false);
+              return null;
+            } else {
+              payloadType = parts[3];
+            }
+            break;
+          }
+        }
+        break;
+      }
+    }
+
+    if (!foundMid) {
+      this.putLog("debug", `Failed to get codec due to mid not found in SDP.`);
+      return null;
+    }
+    if (!payloadType) {
+      this.putLog("debug", `Failed to get codec due to payload type not found.`);
+      return null;
+    }
+
+    // ペイロードタイプに対応するコーデックを探す
+    const escapedPayloadType = payloadType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const line of lines) {
+      const match = line.match(new RegExp(`^a=rtpmap:${escapedPayloadType}\\s+([^\\/]+)\\/`));
+      if (match) {
+        return match[1];
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Answer SDPを解析して、拒否されたコーデックを検出する
+   *
+   * @private
+   * @param {RTCSessionDescriptionInit} answerSDP - Answer SDP
+   * @param {RTCSessionDescriptionInit} offerSDP - Offer SDP
+   * @param {any[]} remote_track_metadata - リモートトラックメタデータ
+   * @param {ConnectionID|null} connection_id - P2Pの場合の接続ID（オプション）
+   * @returns {Array<{connection_id: string, codec: string, mid: string}>} 拒否されたコーデック情報
+   */
+  detectRejectedCodecsInAnswer(answerSDP, offerSDP, remote_track_metadata, connection_id = null, mySupportedCodecs = []) {
+    const unsupportedCodecConnections = [];
+    if (answerSDP.sdp === undefined || offerSDP.sdp === undefined) {
+      return unsupportedCodecConnections;
+    }
+    const answerLines = answerSDP.sdp.split(/\r?\n/);
+
+    // Answer SDPで拒否されたmidを検出
+    for (let i = 0; i < answerLines.length; i++) {
+      const line = answerLines[i].trim();
+
+      // m=video 0 の形式を検出（ポート0 = 拒否）
+      if (line.match(/^m=video\s+0\s+/)) {
+        let mid = null;
+        let isInactive = false;
+
+        for (let j = i + 1; j < answerLines.length; j++) {
+          const nextLine = answerLines[j].trim();
+          if (nextLine.startsWith("m=")) break;
+          const midMatch = nextLine.match(/^a=mid:(.+?)$/);
+          if (midMatch) {
+            mid = midMatch[1].trim();
+          }
+          // ポート 0 は接続できていない状態で切断も含まれるため、 "a=inactive"が含まれる場合は切断と判定
+          if (nextLine === "a=inactive") {
+            isInactive = true;
+          }
+        }
+
+        if (!mid) {
+          this.putLog("debug", `Failed to get mid due to different SDP format.`);
+          // 接続自体には影響しないため、切断せずに処理を継続する
+          this.internalError(61056, "InvalidSDPFormatOnDetectRejectedCodecsInAnswer", false);
+          continue;
+        }
+
+        // getCodecForMid が null を返す場合：
+        // - mid が見つからない（正常）
+        // - payload type が見つからない（正常）
+        // - SDPフォーマットエラー（異常、internalError がログに記録される）
+        // いずれの場合も、このコネクションはスキップして処理を継続する
+        const codec = this.getCodecForMid({ sdp: offerSDP.sdp, mid });
+        if (!codec) {
+          // コーデックが取得できない場合はスキップ
+          this.putLog("debug", `Failed to get codec for mid.`);
+          continue;
+        }
+
+        // P2Pの場合は引数のconnection_idを使用、SFUの場合はremote_track_metadataから取得
+        let targetConnectionId = connection_id;
+        if (!targetConnectionId) {
+          const rtm = remote_track_metadata.find((r) => r.mid === mid && r.kind === "video");
+          targetConnectionId = rtm?.connection_id;
+        }
+
+        if (!targetConnectionId) {
+          // コネクションIDが取得できない場合はスキップ
+          this.putLog("debug", `Failed to get connection ID for mid.`);
+          continue;
+        }
+
+        // コーデックがサポート対象外かチェック
+        const codecLower = codec.toLowerCase();
+        const isUnsupported = !mySupportedCodecs.some((supported) => supported === codecLower);
+
+        if (!isInactive && isUnsupported) {
+          unsupportedCodecConnections.push({
+            connection_id: targetConnectionId,
+            codec: codec,
+            mid: mid,
+          });
+        }
+      }
+    }
+
+    return unsupportedCodecConnections;
+  }
+
+  /**
+   * Answer SDP内で拒否されたコーデックを検出し、必要に応じてイベントを発火する
+   *
+   * @private
+   * @param {RTCSessionDescriptionInit} answerSDP - Answer SDP
+   * @param {RTCSessionDescriptionInit} offerSDP - Offer SDP
+   * @param {any[]} remote_track_metadata - リモートトラックメタデータ
+   * @param {ConnectionID|null} connection_id - P2Pの場合の接続ID（オプション）
+   */
+  detectAndEmitRejectedCodecs(answerSDP, offerSDP, remote_track_metadata, connection_id = null) {
+    const mySupportedCodecs = this.getMySupportedVideoCodecs();
+    const unsupportedCodecConnections = this.detectRejectedCodecsInAnswer(answerSDP, offerSDP, remote_track_metadata, connection_id, mySupportedCodecs);
+    if (unsupportedCodecConnections.length > 0) {
+      const newCodecUnsupportedConnections = unsupportedCodecConnections.filter((r) => !this.rejectedCodecConnections.has(r.connection_id));
+      // 新規のコーデック非対応接続がある場合のみイベント発火
+      if (newCodecUnsupportedConnections.length > 0) {
+        // 発火済みとして記録
+        newCodecUnsupportedConnections.forEach((r) => this.rejectedCodecConnections.add(r.connection_id));
+        this.emit("receiveUnsupportedCodec", {
+          unsupportedCodecConnections: newCodecUnsupportedConnections.map(({ connection_id, codec }) => ({ connection_id, codec })),
+          mySupportedCodecs: mySupportedCodecs,
+        });
+      }
+    }
+  }
+
+  /**
+   * @private
+   * @returns {string[]} サポートされているビデオコーデックのリスト（小文字）
+   */
+  getMySupportedVideoCodecs() {
+    // キャッシュがあればそれを返す
+    if (this.mySupportedVideoCodecsCache !== null) {
+      return this.mySupportedVideoCodecsCache;
+    }
+
+    // 初回取得してキャッシュに保存
+    if (typeof RTCRtpReceiver !== "undefined" && RTCRtpReceiver.getCapabilities) {
+      const capabilities = RTCRtpReceiver.getCapabilities("video");
+      if (capabilities?.codecs) {
+        this.mySupportedVideoCodecsCache = capabilities.codecs.map((c) => c.mimeType.split("/")[1].toLowerCase());
+        return this.mySupportedVideoCodecsCache;
+      }
+    }
+    this.mySupportedVideoCodecsCache = [];
+    return this.mySupportedVideoCodecsCache;
   }
 }
 

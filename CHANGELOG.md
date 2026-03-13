@@ -239,3 +239,10 @@
 ## v1.11.0
 * API変更
   * onError イベントに切断を伴うエラーかどうかを判定する withDisconnection パラメータを追加しました
+
+## v1.12.0
+- API 変更
+  - 他拠点ユーザの映像がコーデック非対応で受信できない場合にエラー通知する receiveUnsupportedCodec イベントを追加しました
+- SDK 修正
+  - onTrackSFU で remote_track_metadata が不正時に addremotetrack イベントが発生しないように修正しました
+  - notify.sfu.track.update が sfu.update_offer より先に到着した場合にメッセージを破棄するように修正しました
