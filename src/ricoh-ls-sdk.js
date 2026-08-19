@@ -1569,6 +1569,18 @@ class Client extends EventTarget {
 
     /**
      * @private
+     * @type {Map<ConnectionID, Log[]>}
+     */
+    this.prevStatsHistories = new Map();
+
+    /**
+     * @private
+     * @type {Log[]}
+     */
+    this.prevSfuStatsHistory = [];
+
+    /**
+     * @private
      * @type {ClientID|null}
      */
     this.client_id = null;
@@ -2052,6 +2064,14 @@ class Client extends EventTarget {
     if (this.sfupc) {
       report.addHistory("Peer(sfu)", "stats", this.sfupc.statsHistory);
     }
+    this.prevStatsHistories.forEach((history, connection_id) => {
+      if (!this.peers.has(connection_id)) {
+        report.addHistory(`Peer(${connection_id})`, "stats", history);
+      }
+    });
+    if (!this.sfupc && this.prevSfuStatsHistory.length > 0) {
+      report.addHistory("Peer(sfu)", "stats", this.prevSfuStatsHistory);
+    }
     return report.dumpMerged();
   }
 
@@ -2081,6 +2101,8 @@ class Client extends EventTarget {
         this.access_token = access_token;
 
         this.peers = new Map();
+        this.prevStatsHistories = new Map();
+        this.prevSfuStatsHistory = [];
         if (option.meta) this.connectionMetadata = option.meta;
         if (option.iceTransportPolicy) this.userIceTransportPolicy = option.iceTransportPolicy;
         if (option.iceServersProtocol !== undefined) this.userIceServersProtocol = option.iceServersProtocol;
@@ -2213,6 +2235,30 @@ class Client extends EventTarget {
   }
 
   /**
+   * peers / sfupc を close/stop し、statsHistory を退避する
+   * 既に close 済み（peers が空、sfupc が null）の場合は何もせず、退避済みデータを保持する
+   *
+   * @private
+   */
+  closePeersAndSfu() {
+    if (this.peers.size > 0) {
+      this.peers.forEach((v, k) => {
+        this.prevStatsHistories.set(k, v.statsHistory);
+        v.close();
+        v.stop();
+      });
+      this.peers = new Map();
+    }
+
+    if (this.sfupc) {
+      this.prevSfuStatsHistory = this.sfupc.statsHistory;
+      this.sfupc.close();
+      this.sfupc.stop();
+      this.sfupc = null;
+    }
+  }
+
+  /**
    * 保持する PeerConnection と WebSocket を開放し
    * State を CLOSING に遷移
    *
@@ -2229,17 +2275,7 @@ class Client extends EventTarget {
 
         if (this.ws) this.ws.close(1000);
 
-        if (this.sfupc) {
-          this.sfupc.close();
-          this.sfupc.stop();
-          this.sfupc = null;
-        }
-        this.peers.forEach((v, k) => {
-          v.close();
-          v.stop();
-          this.peers.delete(k);
-        });
-        this.peers = new Map();
+        this.closePeersAndSfu();
 
         if (this.timerId) {
           window.clearInterval(this.timerId);
@@ -3071,7 +3107,7 @@ class Client extends EventTarget {
         client_id: this.client_id,
         access_token: this.access_token,
         tags: this.metaToTags(this.connectionMetadata),
-        sdk_info: { platform: "web", version: "1.12.0+20260204" },
+        sdk_info: { platform: "web", version: "1.12.1+20260728" },
 
         options: this.makeConnectMessageOptions(this.sendingOption, this.receivingOption, this.userIceServersProtocol),
       };
@@ -3126,17 +3162,7 @@ class Client extends EventTarget {
       if (!this.wscancel && !ignore53004) this.emitError(code, error, e);
     }
 
-    if (this.sfupc) {
-      this.sfupc.close();
-      this.sfupc.stop();
-      this.sfupc = null;
-    }
-    this.peers.forEach((v, k) => {
-      v.close();
-      v.stop();
-      this.peers.delete(k);
-    });
-    this.peers = new Map();
+    this.closePeersAndSfu();
 
     this.rejectedCodecConnections.clear();
 

@@ -246,3 +246,7 @@
 - SDK 修正
   - onTrackSFU で remote_track_metadata が不正時に addremotetrack イベントが発生しないように修正しました
   - notify.sfu.track.update が sfu.update_offer より先に到着した場合にメッセージを破棄するように修正しました
+
+## v1.12.1
+- SDK 修正
+  - `disconnect()` 後に `Client#getStatsReport()` を呼び出すと空の文字列が返る問題を修正しました
